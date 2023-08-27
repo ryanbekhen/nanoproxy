@@ -1,0 +1,86 @@
+project_name: nanoproxy
+dist: dist
+before:
+  hooks:
+    - go mod tidy
+builds:
+
+  - binary: nanoproxy
+    ldflags:
+      - -s -w -X github.com/ryanbekhen/nanoproxy.Version={{ .Version }}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm
+      - arm64
+    flags:
+      - "-a"
+    main: ./
+dockers:
+  - image_templates:
+      - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}"
+      - "ghcr.io/ryanbekhen/nanoproxy:latest"
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - --label=org.opencontainers.image.title={{ .ProjectName }}
+      - --label=org.opencontainers.image.description={{ .ProjectName }}
+      - --label=org.opencontainers.image.url=https://github.com/ryanbekhen/nanoproxy
+      - --label=org.opencontainers.image.source=https://github.com/ryanbekhen/nanoproxy
+      - --label=org.opencontainers.image.version={{ .Version }}
+      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+      - --label=org.opencontainers.image.licenses=Apache-2.0
+
+nfpms:
+  - file_name_template: '{{ .ProjectName }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
+    homepage:  https://github.com/ryanbekhen/nanoproxy
+    description: "nanoproxy is a simple reverse proxy written in Go."
+    maintainer: "Achmad Irianto Eka Putra <i@ryanbekhen.dev>"
+    license: "MIT"
+    vendor: ryanbekhen
+    formats:
+      - deb
+      - rpm
+
+release:
+  draft: false
+
+archives:
+  - name_template: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
+    format_overrides:
+      - goos: windows
+        format: zip
+    wrap_in_directory: true
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: '{{ incpatch .Version }}-next'
+
+changelog:
+  use: git
+  sort: asc
+  groups:
+    - title: 'Features'
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: 'Fixes'
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: 'Enhancements'
+      regexp: "^.*chore[(\\w)]*:+.*$"
+      order: 2
+    - title: Others
+      order: 999
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - Merge pull request
+      - Merge branch
