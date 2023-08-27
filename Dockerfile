@@ -11,7 +11,7 @@ ARG COMMIT=unknown
 COPY . .
 
 RUN go mod tidy \
-    && CGO_ENABLED=0 GOOS=linux go build -o nanoproxy -ldflags "-X main.Version=${VERSION} -X main.Commit=${COMMIT}" proxy.go
+    && CGO_ENABLED=0 GOOS=linux go build -o nanoproxy -ldflags="-s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT}" proxy.go
 
 FROM busybox:1.36.1-glibc
 

@@ -1,9 +1,8 @@
 name: build-oci-image
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [created]
 
 env:
   GH_REGISTRY: ghcr.io
