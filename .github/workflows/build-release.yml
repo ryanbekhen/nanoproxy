@@ -2,8 +2,9 @@ name: build-release
 run-name: Create Github Release for Docker Image and Binary
 
 on:
-  tags:
-    - v*
+  push:
+    tags:
+      - v*
 
 jobs:
   build:
