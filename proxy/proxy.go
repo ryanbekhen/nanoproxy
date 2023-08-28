@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"errors"
 	"io"
 	"log"
 	"net"
@@ -119,13 +120,16 @@ func extractClientAddress(clientAddr string, source interface{}) (string, string
 		if host, port, err := net.SplitHostPort(clientAddr); err == nil {
 			clientIP = host
 			clientPort = port
-		} else if addrErr, ok := err.(*net.AddrError); ok {
-			switch addrErr.Err {
-			case "missing port in address":
-				fallthrough
-			case "too many colons in address":
-				clientIP = clientAddr
-			default:
+		} else {
+			var addrErr *net.AddrError
+			if errors.As(err, &addrErr) {
+				switch addrErr.Err {
+				case "missing port in address":
+					fallthrough
+				case "too many colons in address":
+					clientIP = clientAddr
+				default:
+				}
 			}
 		}
 	}
