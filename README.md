@@ -30,7 +30,7 @@ operating system.
 
 1. Clone this repository: `git clone https://github.com/ryanbekhen/NanoProxy.git`
 2. Navigate to the project directory: `cd NanoProxy`
-3. Run the proxy server: `go build -o nanoproxy proxy.go`
+3. Run the proxy server: `go build -o nanoproxy nanoproxy.go`
 
 ### Usage
 
