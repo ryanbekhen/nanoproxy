@@ -1,6 +1,12 @@
 # NanoProxy
 
-NanoProxy is a lightweight HTTP proxy server designed to provide basic proxying functionality. It supports handling HTTP requests, tunneling, and follows redirects.
+NanoProxy is a lightweight HTTP proxy server designed to provide basic proxying functionality. 
+It supports handling HTTP requests, tunneling, and follows redirects.
+
+> ⚠️ **Notice:** NanoProxy is currently in pre-production stage. While it provides essential proxying capabilities, 
+> please be aware that it is still under active development. Full backward compatibility is not guaranteed until 
+> reaching a stable release. We recommend caution when using NanoProxy for critical production applications. Make sure 
+> to keep an eye on the changelog and be prepared for manual migration steps as the project evolves.
 
 ## Features
 
