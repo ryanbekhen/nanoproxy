@@ -20,6 +20,14 @@ NanoProxy is a lightweight HTTP proxy server designed to provide basic proxying 
 1. Run the proxy server: `go run proxy.go`
 2. The proxy will start listening on the default address and port (:8080) and use default configuration values.
 
+### Running on Docker
+
+You can also run NanoProxy using Docker. To do so, you can use the following command:
+
+```shell
+docker run -p 8080:8080 ghcr.io/ryanbekhen/nanoproxy:latest
+```
+
 ### Configuration
 
 You can modify the behavior of NanoProxy by adjusting the command line flags when running the proxy. The available flags are:
@@ -27,7 +35,7 @@ You can modify the behavior of NanoProxy by adjusting the command line flags whe
 - `-addr`: Proxy listen address (default: :8080).
 - `-pem`: Path to the PEM file for TLS (HTTPS) support.
 - `-key`: Path to the private key file for TLS.
-- `-proto`: Proxy protocol (http or https).
+- `-proto`: Proxy protocol `http` or `https`. If set to `https`, the `-pem` and `-key` flags must be set.
 - `-timeout`: Timeout duration for tunneling connections (default: 15 seconds).
 
 Modify these flags according to your requirements.
