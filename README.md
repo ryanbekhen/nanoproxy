@@ -62,6 +62,23 @@ TIMEOUT=15s
 
 Modify these flags or environment variables according to your requirements.
 
+### Testing with cURL
+
+To test the proxy using cURL, you can use the `-x` flag followed by the proxy URL. For example, to fetch the Google 
+homepage using the proxy running on `localhost:8080`, use the following command:
+
+```shell
+curl -x localhost:8080 https://www.google.com
+```
+
+Replace localhost:8080 with the actual address and port where your NanoProxy instance is running. This command instructs 
+cURL to use the specified proxy for the request, allowing you to see the request and response through the proxy server.
+
+Remember that you can adjust the proxy address and port as needed based on your setup. This is a convenient way to 
+verify that NanoProxy is correctly intercepting and forwarding the traffic.
+
+
+
 ## Contributions
 
 Contributions are welcome! Feel free to open issues and submit pull requests.
