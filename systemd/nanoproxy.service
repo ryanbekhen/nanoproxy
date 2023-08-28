@@ -1,0 +1,13 @@
+[Unit]
+Description=NanoProxy is a simple reverse proxy written in Go
+After=network.target
+
+[Service]
+EnvironmentFile=/etc/nanoproxy/nanoproxy.env
+ExecStart=/usr/bin/nanoproxy
+WorkingDirectory=/usr/bin
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target

@@ -2,6 +2,7 @@ package config
 
 import (
 	"flag"
+	"os"
 	"time"
 )
 
@@ -21,5 +22,28 @@ func New() *Config {
 	flag.StringVar(&c.Addr, "addr", ":8080", "proxy listen address (default :8080)")
 	flag.DurationVar(&c.TunnelTimeout, "timeout", time.Second*15, "tunnel timeout (default 15s)")
 	flag.Parse()
+
+	if os.Getenv("PEM") != "" {
+		c.PemPath = os.Getenv("PEM")
+	}
+
+	if os.Getenv("KEY") != "" {
+		c.KeyPath = os.Getenv("KEY")
+	}
+
+	if os.Getenv("PROTO") != "" {
+		c.Proto = os.Getenv("PROTO")
+	}
+
+	if os.Getenv("ADDR") != "" {
+		c.Addr = os.Getenv("ADDR")
+	}
+
+	if os.Getenv("TIMEOUT") != "" {
+		d, err := time.ParseDuration(os.Getenv("TIMEOUT"))
+		if err == nil {
+			c.TunnelTimeout = d
+		}
+	}
 	return c
 }

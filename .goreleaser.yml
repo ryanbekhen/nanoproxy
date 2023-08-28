@@ -43,6 +43,11 @@ nfpms:
     maintainer: "Achmad Irianto Eka Putra <i@ryanbekhen.dev>"
     license: "MIT"
     vendor: ryanbekhen
+    contents:
+      - src: systemd/nanoproxy.service
+        dst: /etc/systemd/system/nanoproxy.service
+      - src: .env.sample
+        dst: /etc/nanoproxy/nanoproxy.env
     formats:
       - deb
       - rpm
@@ -52,9 +57,6 @@ release:
 
 archives:
   - name_template: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
-    format_overrides:
-      - goos: windows
-        format: zip
     wrap_in_directory: true
 
 checksum:
