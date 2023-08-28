@@ -32,6 +32,7 @@ func main() {
 	}
 
 	// start server with TLS if protocol is https otherwise start server without TLS (http)
+	log.Printf("Starting %s server on %s", cfg.Proto, cfg.Addr)
 	if cfg.Proto == "https" {
 		log.Fatal(server.ListenAndServeTLS(cfg.PemPath, cfg.KeyPath))
 	} else {

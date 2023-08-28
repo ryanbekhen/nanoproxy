@@ -71,20 +71,14 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	// copy all headers from the response to the client
 	copyHeader(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
-	_, err = io.Copy(w, resp.Body)
-	if err != nil {
-		log.Println(err)
-	}
+	_, _ = io.Copy(w, resp.Body)
 }
 
 // transfer bytes from src to dst until either EOF is reached on src or an error occurs
 func transfer(destination io.WriteCloser, source io.ReadCloser) {
 	defer destination.Close()
 	defer source.Close()
-	_, err := io.Copy(destination, source)
-	if err != nil {
-		log.Println(err)
-	}
+	_, _ = io.Copy(destination, source)
 }
 
 // copyHeader copies headers from src to dst and adds them to dst if they are not already present in dst
