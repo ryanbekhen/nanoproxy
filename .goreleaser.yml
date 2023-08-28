@@ -12,15 +12,7 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
-      - windows
       - darwin
-    goarch:
-      - amd64
-      - arm
-      - arm64
-    flags:
-      - "-a"
-    main: ./
 dockers:
   - image_templates:
       - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}"
