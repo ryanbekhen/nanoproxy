@@ -66,7 +66,9 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
 
 	// copy all headers from the response to the client
 	copyHeader(w.Header(), resp.Header)
@@ -76,8 +78,10 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 
 // transfer bytes from src to dst until either EOF is reached on src or an error occurs
 func transfer(destination io.WriteCloser, source io.ReadCloser) {
-	defer destination.Close()
-	defer source.Close()
+	defer func() {
+		_ = destination.Close()
+		_ = source.Close()
+	}()
 	_, _ = io.Copy(destination, source)
 }
 
