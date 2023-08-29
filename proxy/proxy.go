@@ -10,6 +10,20 @@ import (
 	"time"
 )
 
+// Hop-by-hop headers. These are removed when sent to the backend.
+// (https://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html)
+var hopHeaders = []string{
+	"Connection",
+	"Proxy-Connection", // non-standard but still sent by libcurl and rejected by e.g. google
+	"Keep-Alive",
+	"Proxy-Authenticate",
+	"Proxy-Authorization",
+	"Te", // canonicalized version of "TE"
+	"Trailers",
+	"Transfer-Encoding",
+	"Upgrade",
+}
+
 type Proxy struct {
 	TunnelTimeout time.Duration // tunnel timeout in seconds (default 15s)
 }
@@ -60,6 +74,9 @@ func (p *Proxy) handleTunneling(w http.ResponseWriter, r *http.Request) {
 
 // handleHTTP handles HTTP proxy requests by copying the request and response bodies to the destination server
 func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
+	// remove hop-by-hop headers
+	removeHopHeaders(r.Header)
+
 	// create a new HTTP request by copying the incoming request (r) and
 	// changing the URL scheme and host to the destination server
 	resp, err := http.DefaultTransport.RoundTrip(r)
@@ -71,10 +88,19 @@ func (p *Proxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = Body.Close()
 	}(resp.Body)
 
+	// remove hop-by-hop headers
+	removeHopHeaders(resp.Header)
+
 	// copy all headers from the response to the client
 	copyHeader(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
+}
+
+func removeHopHeaders(header http.Header) {
+	for _, h := range hopHeaders {
+		header.Del(h)
+	}
 }
 
 // transfer bytes from src to dst until either EOF is reached on src or an error occurs
