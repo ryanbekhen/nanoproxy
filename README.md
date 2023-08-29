@@ -8,11 +8,37 @@ It supports handling HTTP requests, tunneling, and follows redirects.
 > reaching a stable release. We recommend caution when using NanoProxy for critical production applications. Make sure 
 > to keep an eye on the changelog and be prepared for manual migration steps as the project evolves.
 
+## Data Flow Through Proxy
+
+NanoProxy acts as an intermediary between user requests and the destination server. When a user makes a request, 
+NanoProxy forwards the request to the destination server. The destination server processes the request and responds 
+back to NanoProxy, which then sends the response back to the user. This allows NanoProxy to intercept and manage 
+network traffic effectively.
+
+Here's how the data flows through the proxy:
+
+```text
+      Network          Proxy            Destination Server
+    .---------.     .---------.       .-----------------.
+--> |         | --> |         | ----> |                 |
+    | Request |     | Forward | <---- |  Process &      |
+<-- |         | <-- | Request |       |  Respond        |
+    `---------'     `---------'       |                 |
+                                      `-----------------'
+```
+
+This clear separation of responsibilities helps optimize network communication and enables various 
+proxy-related functionalities.
+
 ## Features
 
-- Simple and minimalistic HTTP proxy server.
-- Handles both HTTP requests and tunneling (CONNECT) for HTTPS.
-- Lightweight and easy to configure.
+- **Simple and minimalistic HTTP proxy server.** NanoProxy is designed with simplicity in mind, making it easy to set 
+up and use for various purposes.
+- **Handles both HTTP requests and tunneling (CONNECT) for HTTPS.** NanoProxy supports both HTTP requests and tunneling, 
+allowing you to proxy regular HTTP requests as well as secure HTTPS connections.
+- **Lightweight and easy to configure.** With a small footprint and straightforward configuration options, NanoProxy is 
+a lightweight solution that can be quickly configured to suit your needs.
+
 
 ## Getting Started
 
