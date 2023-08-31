@@ -27,6 +27,7 @@ jobs:
         run: go test ./... -coverprofile=./cover.out
 
       - name: Check Test Coverage
+        id: coverage
         uses: vladopajic/go-test-coverage@v2
         with:
           config: ./.testcoverage.yml
