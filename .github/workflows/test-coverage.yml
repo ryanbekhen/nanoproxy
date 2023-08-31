@@ -40,4 +40,4 @@ jobs:
           message-color: ${{ steps.coverage.outputs.badge-color }}
           file-name: coverage.svg
           badge-branch: badges ## orphan branch where badge will be committed
-          github-token: "${{ secrets.GITHUB_TOKEN }}"
+          github-token: "${{ secrets.GH_PAT }}"
