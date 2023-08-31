@@ -50,10 +50,10 @@ func (p *Proxy) handleTunneling(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// HTTP/1.1 200 OK\r\n\r\n
+	// send a 200 OK response to client to establish a tunnel connection with the destination server
 	w.WriteHeader(http.StatusOK)
 
-	// hijack the connection from the HTTP server
+	// hijack the client connection from the HTTP server
 	hijacker, ok := w.(http.Hijacker)
 	if !ok {
 		http.Error(w, "Hijacking not supported", http.StatusInternalServerError)
@@ -154,15 +154,8 @@ func extractClientAddress(clientAddr string, source interface{}) (string, string
 					fallthrough
 				case "too many colons in address":
 					clientIP = clientAddr
-				default:
 				}
 			}
-		}
-	}
-
-	if clientIP == "" {
-		if r, isRequest := source.(*http.Request); isRequest {
-			source = map[string]interface{}{"headers": r.Header, "remote_addr": r.RemoteAddr}
 		}
 	}
 
