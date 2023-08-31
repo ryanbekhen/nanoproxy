@@ -57,8 +57,8 @@ operating system.
 
 #### 2. Build from Source
 
-1. Clone this repository: `git clone https://github.com/ryanbekhen/NanoProxy.git`
-2. Navigate to the project directory: `cd NanoProxy`
+1. Clone this repository: `git clone https://github.com/ryanbekhen/nanoproxy.git`
+2. Navigate to the project directory: `cd nanoproxy`
 3. Run the proxy server: `go build -o nanoproxy nanoproxy.go`
 
 ### Usage
