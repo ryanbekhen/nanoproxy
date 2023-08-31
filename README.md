@@ -1,5 +1,8 @@
 # NanoProxy
 
+![coverage](https://raw.githubusercontent.com/ryanbekhen/nanoproxy/badges/.badges/main/coverage.svg)
+[![Go Report Card](https://goreportcard.com/badge/github.com/ryanbekhen/nanoproxy?cache=v1)](https://goreportcard.com/report/github.com/vladopajic/go-test-coverage)
+
 NanoProxy is a lightweight HTTP proxy server designed to provide basic proxying functionality. 
 It supports handling HTTP requests, tunneling, and follows redirects.
 
