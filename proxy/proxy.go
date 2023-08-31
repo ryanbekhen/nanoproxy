@@ -134,11 +134,11 @@ func extractClientAddressFromRequest(r *http.Request) (string, string) {
 		clientAddr = r.RemoteAddr
 	}
 
-	return extractClientAddress(clientAddr, r)
+	return extractClientAddress(clientAddr)
 }
 
-// extractClientAddress extracts the client IP address from the request headers
-func extractClientAddress(clientAddr string, source interface{}) (string, string) {
+// extractClientAddress extracts the client IP address and port from the clientAddr string
+func extractClientAddress(clientAddr string) (string, string) {
 	var clientIP, clientPort string
 
 	if clientAddr != "" {
