@@ -47,6 +47,13 @@ nfpms:
 release:
   draft: false
 
+publishers:
+  - name: fury.io
+    ids:
+      - packages
+    dir: "{{ dir .ArtifactPath }}"
+    cmd: curl -F package=@{{ .ArtifactName }} https://{{ .Env.FURY_TOKEN }}@push.fury.io/ryanbekhen/
+
 archives:
   - name_template: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
     wrap_in_directory: true
@@ -61,16 +68,16 @@ changelog:
   use: git
   sort: asc
   groups:
-    - title: 'Features'
+    - title: ':rocket: Features'
       regexp: "^.*feat[(\\w)]*:+.*$"
       order: 0
-    - title: 'Fixes'
+    - title: ':bug: Fixes'
       regexp: "^.*fix[(\\w)]*:+.*$"
       order: 1
-    - title: 'Enhancements'
+    - title: ':hammer_and_wrench: Enhancements'
       regexp: "^.*chore[(\\w)]*:+.*$"
       order: 2
-    - title: Others
+    - title: ':gear: Others'
       order: 999
   filters:
     exclude:
