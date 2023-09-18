@@ -45,8 +45,20 @@ nfpms:
       - rpm
 
   - id: packages
-    maintainer: "Achmad Irianto Eka Putra <i@ryanbekhen.dev>"
     file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    homepage: https://github.com/ryanbekhen/nanoproxy
+    description: "nanoproxy is a simple reverse proxy written in Go."
+    maintainer: "Achmad Irianto Eka Putra <i@ryanbekhen.dev>"
+    license: "MIT"
+    vendor: ryanbekhen
+    contents:
+      - src: systemd/nanoproxy.service
+        dst: /etc/systemd/system/nanoproxy.service
+      - src: .env.sample
+        dst: /etc/nanoproxy/nanoproxy.env
+    formats:
+      - deb
+      - rpm
 
 release:
   draft: false
