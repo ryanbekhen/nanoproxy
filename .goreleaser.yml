@@ -45,6 +45,7 @@ nfpms:
       - rpm
 
   - id: packages
+    maintainer: "Achmad Irianto Eka Putra <i@ryanbekhen.dev>"
     file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 release:
