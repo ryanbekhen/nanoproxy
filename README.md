@@ -42,31 +42,63 @@ allowing you to proxy regular HTTP requests as well as secure HTTPS connections.
 - **Lightweight and easy to configure.** With a small footprint and straightforward configuration options, NanoProxy is 
 a lightweight solution that can be quickly configured to suit your needs.
 
+## Installation
 
-## Getting Started
+You can easily install NanoProxy using your package manager by adding the official NanoProxy repository.
 
-### Installation
+### Debian and Ubuntu
 
-You have multiple options for installing NanoProxy:
+Add the NanoProxy repository to your sources list:
 
-#### 1. Download from GitHub Releases
+```shell
+echo "deb [trusted=yes] https://repo.ryanbekhen.dev/apt/ /" | sudo tee /etc/apt/sources.list.d/ryanbekhen.list
+```
 
-You can download the latest release of NanoProxy from the 
-[GitHub Releases page](https://github.com/ryanbekhen/nanoproxy/releases). Choose the appropriate installer for your 
-operating system.
+Then, update the package list and install NanoProxy:
 
-#### 2. Build from Source
+```shell
+sudo apt update
+sudo apt install nanoproxy
+```
 
-1. Clone this repository: `git clone https://github.com/ryanbekhen/nanoproxy.git`
-2. Navigate to the project directory: `cd nanoproxy`
-3. Run the proxy server: `go build -o nanoproxy nanoproxy.go`
+### Red Hat, CentOS, and Fedora
 
-### Usage
+Add the NanoProxy repository configuration:
 
-1. Run the proxy server: `./nanoproxy`
-2. The proxy will start listening on the default address and port (:8080) and use default configuration values.
+```shell
+sudo tee /etc/yum.repos.d/ryanbekhen.repo <<EOF
+[fury]
+name=ryanbekhen
+baseurl=https://repo.ryanbekhen.dev/yum/
+enabled=1
+gpgcheck=0
+EOF
+```
 
-### Running on Docker
+Now, you can install NanoProxy using yum:
+```shell
+sudo yum install nanoproxy
+```
+
+## Usage
+
+After installing NanoProxy using the provided packages (.deb or .rpm) or accessed it through the repository,
+you can manage NanoProxy as a service using the system's service management tool (systemd). To enable NanoProxy to start 
+automatically on system boot, run the following command:
+
+To enable automatic startup on system boot, run:
+
+```shell
+sudo systemctl enable nanoproxy
+```
+
+To start the service, run:
+
+```shell
+sudo systemctl start nanoproxy
+```
+
+## Running on Docker
 
 You can also run NanoProxy using Docker. To do so, you can use the following command:
 
@@ -74,7 +106,7 @@ You can also run NanoProxy using Docker. To do so, you can use the following com
 docker run -p 8080:8080 ghcr.io/ryanbekhen/nanoproxy:latest
 ```
 
-### Configuration
+## Configuration
 
 You can modify the behavior of NanoProxy by adjusting the command line flags when running the proxy. The available flags are:
 
@@ -84,7 +116,7 @@ You can modify the behavior of NanoProxy by adjusting the command line flags whe
 - `-proto`: Proxy protocol `http` or `https`. If set to `https`, the `-pem` and `-key` flags must be set.
 - `-timeout`: Timeout duration for tunneling connections (default: 15 seconds).
 
-If you are installing NanoProxy locally, you can set the configuration using environment variables. Create a file
+You can set the configuration using environment variables. Create a file
 at `/etc/nanoproxy/nanoproxy.env` and add the desired values:
 
 ```text
@@ -97,7 +129,7 @@ TIMEOUT=15s
 
 Modify these flags or environment variables according to your requirements.
 
-### Testing with cURL
+## Testing
 
 To test the proxy using cURL, you can use the `-x` flag followed by the proxy URL. For example, to fetch the Google 
 homepage using the proxy running on `localhost:8080`, use the following command:
@@ -111,8 +143,6 @@ cURL to use the specified proxy for the request, allowing you to see the request
 
 Remember that you can adjust the proxy address and port as needed based on your setup. This is a convenient way to 
 verify that NanoProxy is correctly intercepting and forwarding the traffic.
-
-
 
 ## Contributions
 
