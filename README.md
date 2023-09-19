@@ -77,6 +77,7 @@ EOF
 
 Now, you can install NanoProxy using yum:
 ```shell
+sudo yum update
 sudo yum install nanoproxy
 ```
 
