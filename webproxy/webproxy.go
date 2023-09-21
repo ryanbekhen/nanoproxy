@@ -1,6 +1,7 @@
 package webproxy
 
 import (
+	"encoding/base64"
 	"github.com/rs/zerolog"
 	"github.com/valyala/fasthttp"
 	"io"
@@ -26,10 +27,12 @@ var hopHeaders = []string{
 type WebProxy struct {
 	TunnelTimeout time.Duration // tunnel timeout in seconds (default 15s)
 	Logger        zerolog.Logger
+	BasicAuth     string
 }
 
-func New(tunnelTimeout time.Duration, logger zerolog.Logger) *WebProxy {
+func New(basic string, tunnelTimeout time.Duration, logger zerolog.Logger) *WebProxy {
 	return &WebProxy{
+		BasicAuth:     basic,
 		TunnelTimeout: tunnelTimeout,
 		Logger:        logger,
 	}
@@ -37,6 +40,30 @@ func New(tunnelTimeout time.Duration, logger zerolog.Logger) *WebProxy {
 
 // Handler handles incoming HTTP requests and proxies them to the destination server
 func (s *WebProxy) Handler(ctx *fasthttp.RequestCtx) {
+	// check for basic auth
+	if s.BasicAuth != "" {
+		proxyAuth := string(ctx.Request.Header.Peek("Proxy-Authorization"))
+		if proxyAuth == "" {
+			ctx.Error("Unauthorized", fasthttp.StatusProxyAuthRequired)
+			return
+		}
+
+		proxyAuth = strings.TrimPrefix(proxyAuth, "Basic ")
+		base64Io := base64.NewDecoder(base64.StdEncoding, strings.NewReader(proxyAuth))
+
+		// read the decoded username:password
+		decoded, err := io.ReadAll(base64Io)
+		if err != nil {
+			ctx.Error(err.Error(), fasthttp.StatusBadRequest)
+			return
+		}
+
+		if string(decoded) != s.BasicAuth {
+			ctx.Error("Unauthorized", fasthttp.StatusUnauthorized)
+			return
+		}
+	}
+
 	// remove hop-by-hop headers
 	removeHopHeaders(&ctx.Request.Header)
 
@@ -75,12 +102,15 @@ func (s *WebProxy) handleTunneling(ctx *fasthttp.RequestCtx) {
 func (s *WebProxy) handleHTTP(ctx *fasthttp.RequestCtx) {
 	defer s.loggerDetails("HTTP", ctx)
 
+	// create a new HTTP request
 	req := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(req)
 
+	// create a new HTTP response
 	resp := fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(resp)
 
+	// copy the original request to the new request
 	req.SetRequestURIBytes(ctx.RequestURI())
 	req.Header.SetMethodBytes(ctx.Method())
 	req.Header.SetHostBytes(ctx.Host())
@@ -106,7 +136,7 @@ func removeHopHeaders(header *fasthttp.RequestHeader) {
 func (s *WebProxy) loggerDetails(message string, ctx *fasthttp.RequestCtx) {
 	latency := time.Since(ctx.Time())
 	s.Logger.Info().
-		Str("ip", net.JoinHostPort(extractClientAddressFromRequest(ctx))).
+		Str("ip", extractClientAddressFromRequest(ctx)).
 		Str("url", string(ctx.RequestURI())).
 		Str("latency", latency.String()).
 		Msg(message)
@@ -132,7 +162,7 @@ func transfer(destination io.Writer, source io.Reader) {
 }
 
 // extractClientAddressFromRequest extracts the client address from the request headers
-func extractClientAddressFromRequest(ctx *fasthttp.RequestCtx) (string, string) {
+func extractClientAddressFromRequest(ctx *fasthttp.RequestCtx) string {
 	clientAddr := string(ctx.Request.Header.Peek("X-Forwarded-For"))
 	if len(clientAddr) > 0 {
 		clientAddr = strings.Split(clientAddr, ",")[0]
@@ -150,21 +180,5 @@ func extractClientAddressFromRequest(ctx *fasthttp.RequestCtx) (string, string) 
 		}
 	}
 
-	return extractClientAddress(clientAddr)
-}
-
-func extractClientAddress(clientAddr string) (string, string) {
-	var clientIP, clientPort string
-
-	if clientAddr != "" {
-		clientAddr = strings.TrimSpace(clientAddr)
-		if host, port, err := net.SplitHostPort(clientAddr); err == nil {
-			clientIP = host
-			clientPort = port
-		} else {
-			clientIP = clientAddr
-		}
-	}
-
-	return clientIP, clientPort
+	return clientAddr
 }

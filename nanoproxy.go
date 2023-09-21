@@ -26,7 +26,7 @@ func main() {
 		logger.Fatal().Msg("Protocol must be http or https")
 	}
 
-	srv := webproxy.New(cfg.TunnelTimeout, logger)
+	srv := webproxy.New(cfg.BasicAuth, cfg.TunnelTimeout, logger)
 	server := &fasthttp.Server{
 		Handler:     srv.Handler,
 		ReadTimeout: 15 * time.Second,
