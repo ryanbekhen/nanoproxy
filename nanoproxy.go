@@ -16,10 +16,13 @@ func main() {
 	loc, _ := time.LoadLocation(os.Getenv("TZ"))
 	time.Local = loc
 
-	logger := log.Output(zerolog.ConsoleWriter{
-		Out:        os.Stderr,
-		TimeFormat: time.RFC3339,
-	}).With().Timestamp().Logger()
+	logLevel := zerolog.InfoLevel
+	if cfg.Debug {
+		logLevel = zerolog.DebugLevel
+	}
+
+	logger := log.Level(logLevel).Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339}).
+		With().Timestamp().Logger()
 
 	// validate protocol is http or https only
 	if cfg.Proto != "http" && cfg.Proto != "https" {
@@ -28,8 +31,8 @@ func main() {
 
 	srv := webproxy.New(cfg.BasicAuth, cfg.TunnelTimeout, logger)
 	server := &fasthttp.Server{
-		Handler:     srv.Handler,
-		ReadTimeout: 15 * time.Second,
+		Handler: srv.Handler,
+		Logger:  &logger,
 	}
 
 	logger.Info().Msg("Listening on " + cfg.Addr)

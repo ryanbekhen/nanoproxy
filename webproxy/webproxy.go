@@ -44,7 +44,8 @@ func (s *WebProxy) Handler(ctx *fasthttp.RequestCtx) {
 	if s.BasicAuth != "" {
 		proxyAuth := string(ctx.Request.Header.Peek("Proxy-Authorization"))
 		if proxyAuth == "" {
-			ctx.Error("Unauthorized", fasthttp.StatusProxyAuthRequired)
+			ctx.Logger().Printf("Requires authentication")
+			ctx.Error("Requires authentication", fasthttp.StatusProxyAuthRequired)
 			return
 		}
 
@@ -54,11 +55,13 @@ func (s *WebProxy) Handler(ctx *fasthttp.RequestCtx) {
 		// read the decoded username:password
 		decoded, err := io.ReadAll(base64Io)
 		if err != nil {
+			ctx.Logger().Printf("Decoding error: %s", err.Error())
 			ctx.Error(err.Error(), fasthttp.StatusBadRequest)
 			return
 		}
 
 		if string(decoded) != s.BasicAuth {
+			ctx.Logger().Printf("Unauthorized")
 			ctx.Error("Unauthorized", fasthttp.StatusUnauthorized)
 			return
 		}

@@ -12,7 +12,6 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
-      - darwin
 dockers:
   - image_templates:
       - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}"
@@ -38,9 +37,12 @@ nfpms:
     contents:
       - src: systemd/nanoproxy.service
         dst: /etc/systemd/system/nanoproxy.service
+        type: "config|noreplace"
       - src: .env.sample
-        dst: /etc/nanoproxy/nanoproxy.env
+        dst: /etc/nanoproxy/nanoproxy
+        type: "config|noreplace"
     formats:
+      - apk
       - deb
       - rpm
 

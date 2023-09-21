@@ -13,6 +13,7 @@ type Config struct {
 	Addr          string
 	TunnelTimeout time.Duration
 	BasicAuth     string
+	Debug         bool
 }
 
 func New() *Config {
@@ -23,6 +24,7 @@ func New() *Config {
 	flag.StringVar(&c.Addr, "addr", ":8080", "proxy listen address (default :8080)")
 	flag.DurationVar(&c.TunnelTimeout, "timeout", time.Second*15, "tunnel timeout (default 15s)")
 	flag.StringVar(&c.BasicAuth, "auth", "", "basic auth (username:password)")
+	flag.BoolVar(&c.Debug, "debug", false, "debug mode")
 	flag.Parse()
 
 	if os.Getenv("PEM") != "" {

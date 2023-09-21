@@ -4,7 +4,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/ryanbekhen/nanoproxy?cache=v1)](https://goreportcard.com/report/github.com/vladopajic/go-test-coverage)
 
 NanoProxy is a lightweight HTTP proxy server designed to provide basic proxying functionality. 
-It supports handling HTTP requests, tunneling, and follows redirects.
+It supports handling HTTP requests and tunneling for HTTPS. NanoProxy is written in Go and built on top of FastHTTP.
 
 > ⚠️ **Notice:** NanoProxy is currently in pre-production stage. While it provides essential proxying capabilities, 
 > please be aware that it is still under active development. Full backward compatibility is not guaranteed until 
@@ -116,6 +116,8 @@ You can modify the behavior of NanoProxy by adjusting the command line flags whe
 - `-key`: Path to the private key file for TLS.
 - `-proto`: Proxy protocol `http` or `https`. If set to `https`, the `-pem` and `-key` flags must be set.
 - `-timeout`: Timeout duration for tunneling connections (default: 15 seconds).
+- `-auth`: Basic authentication credentials in the form of `username:password`.
+- `-debug`: Enable debug mode.
 
 You can set the configuration using environment variables. Create a file
 at `/etc/nanoproxy/nanoproxy.env` and add the desired values:
@@ -126,6 +128,8 @@ PROTO=http
 PEM=server.pem
 KEY=server.key
 TIMEOUT=15s
+AUTH=user:pass
+TZ=Asia/Jakarta
 ```
 
 Modify these flags or environment variables according to your requirements.
