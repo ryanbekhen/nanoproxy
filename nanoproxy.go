@@ -1,11 +1,11 @@
 package main
 
 import (
-	"crypto/tls"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/ryanbekhen/nanoproxy/config"
-	"github.com/ryanbekhen/nanoproxy/proxy"
-	"log"
-	"net/http"
+	"github.com/ryanbekhen/nanoproxy/webproxy"
+	"github.com/valyala/fasthttp"
 	"os"
 	"time"
 	_ "time/tzdata"
@@ -16,26 +16,28 @@ func main() {
 	loc, _ := time.LoadLocation(os.Getenv("TZ"))
 	time.Local = loc
 
+	logger := log.Output(zerolog.ConsoleWriter{
+		Out:        os.Stderr,
+		TimeFormat: time.RFC3339,
+	}).With().Timestamp().Logger()
+
 	// validate protocol is http or https only
 	if cfg.Proto != "http" && cfg.Proto != "https" {
-		log.Fatal("Protocol must be http or https")
+		logger.Fatal().Msg("Protocol must be http or https")
 	}
 
-	srv := proxy.New(cfg.TunnelTimeout)
-	server := &http.Server{
-		Addr:              cfg.Addr,
-		Handler:           srv,
-		ReadHeaderTimeout: 15 * time.Second,
-
-		// Disable HTTP/2.
-		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
+	srv := webproxy.New(cfg.TunnelTimeout, logger)
+	server := &fasthttp.Server{
+		Handler:     srv.Handler,
+		ReadTimeout: 15 * time.Second,
 	}
 
-	// start server with TLS if protocol is https otherwise start server without TLS (http)
-	log.Printf("Starting %s server on %s", cfg.Proto, cfg.Addr)
+	logger.Info().Msg("Listening on " + cfg.Addr)
 	if cfg.Proto == "https" {
-		log.Fatal(server.ListenAndServeTLS(cfg.PemPath, cfg.KeyPath))
+		err := server.ListenAndServeTLS(cfg.Addr, cfg.PemPath, cfg.KeyPath)
+		logger.Fatal().Msg("ListenAndServeTLS: " + err.Error())
 	} else {
-		log.Fatal(server.ListenAndServe())
+		err := server.ListenAndServe(cfg.Addr)
+		logger.Fatal().Msg("ListenAndServe: " + err.Error())
 	}
 }
