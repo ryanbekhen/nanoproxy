@@ -40,7 +40,10 @@ func main() {
 	server.Use(recoverFiber.New())
 	server.Use(basicauth.New(basicauth.Config{Users: cfg.BasicAuth()}))
 	server.Use(hopbyhop.New())
-	server.Use(fiberzerolog.New(fiberzerolog.Config{Logger: &logger}))
+	server.Use(fiberzerolog.New(fiberzerolog.Config{
+		Logger: &logger,
+		Fields: []string{"ip", "latency", "status", "url", "error"},
+	}))
 
 	// routes
 	server.All("*", srv.Handler)
