@@ -1,6 +1,7 @@
 package webproxy
 
 import (
+	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/valyala/fasthttp"
 	"io"
@@ -60,8 +61,9 @@ func (s *WebProxy) handleHTTP(c *fiber.Ctx) error {
 
 // handleTunneling handles CONNECT requests
 func (s *WebProxy) handleTunneling(c *fiber.Ctx) error {
-	destConn, err := fasthttp.DialTimeout(c.Hostname(), s.TunnelTimeout)
+	destConn, err := fasthttp.DialTimeout(c.OriginalURL(), s.TunnelTimeout)
 	if err != nil {
+		fmt.Println(err)
 		return c.Status(fiber.StatusServiceUnavailable).SendString(err.Error())
 	}
 
