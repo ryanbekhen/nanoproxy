@@ -48,7 +48,7 @@ func Test_Middleware_BasicAuth(t *testing.T) {
 		},
 		{
 			url:        "/testauth",
-			statusCode: fiber.StatusUnauthorized,
+			statusCode: fiber.StatusProxyAuthRequired,
 			username:   "john",
 			password:   "wrong",
 		},
