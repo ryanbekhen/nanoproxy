@@ -1,7 +1,6 @@
 package webproxy
 
 import (
-	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/valyala/fasthttp"
 	"io"
@@ -49,7 +48,7 @@ func (s *WebProxy) handleHTTP(c *fiber.Ctx) error {
 	// send request and receive response
 	var resp fiber.Response
 	if err := agent.DoTimeout(req, &resp, s.TunnelTimeout); err != nil {
-		return err
+		return c.SendStatus(fiber.StatusBadGateway)
 	}
 
 	// copy response headers
@@ -63,8 +62,7 @@ func (s *WebProxy) handleHTTP(c *fiber.Ctx) error {
 func (s *WebProxy) handleTunneling(c *fiber.Ctx) error {
 	destConn, err := fasthttp.DialTimeout(c.OriginalURL(), s.TunnelTimeout)
 	if err != nil {
-		fmt.Println(err)
-		return c.Status(fiber.StatusServiceUnavailable).SendString(err.Error())
+		return c.SendStatus(fiber.StatusBadGateway)
 	}
 
 	// hijack the client connection from the HTTP server

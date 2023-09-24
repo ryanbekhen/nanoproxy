@@ -76,7 +76,7 @@ func Test_Middleware_WebProxy_HTTPS(t *testing.T) {
 	appProxy := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
 	})
-	proxy := New(time.Second * 5)
+	proxy := New(3 * time.Second)
 	appProxy.All("*", proxy.Handler)
 
 	tlsconf, _, err := getTLSConfigs()
@@ -122,6 +122,13 @@ func Test_Middleware_WebProxy_HTTPS(t *testing.T) {
 	body, err := io.ReadAll(resp.Body)
 	utils.AssertEqual(t, nil, err)
 	utils.AssertEqual(t, "Hello, World!", string(body))
+
+	client2 := &http.Client{
+		Transport: transport,
+	}
+
+	_, err = client2.Get("https://wronghost")
+	utils.AssertEqual(t, "Get \"https://wronghost\": Bad Gateway", err.Error())
 }
 
 // getTLSConfigs returns a server and client TLS config
