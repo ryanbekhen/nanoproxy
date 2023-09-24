@@ -4,7 +4,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/ryanbekhen/nanoproxy?cache=v1)](https://goreportcard.com/report/github.com/vladopajic/go-test-coverage)
 
 NanoProxy is a lightweight HTTP proxy server designed to provide basic proxying functionality. 
-It supports handling HTTP requests and tunneling for HTTPS. NanoProxy is written in Go and built on top of FastHTTP.
+It supports handling HTTP requests and tunneling for HTTPS. NanoProxy is written in Go and built on top of Fiber.
 
 > ⚠️ **Notice:** NanoProxy is currently in pre-production stage. While it provides essential proxying capabilities, 
 > please be aware that it is still under active development. Full backward compatibility is not guaranteed until 

@@ -1,11 +1,15 @@
 package main
 
 import (
+	"github.com/gofiber/contrib/fiberzerolog"
+	"github.com/gofiber/fiber/v2"
+	recoverFiber "github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/ryanbekhen/nanoproxy/config"
+	"github.com/ryanbekhen/nanoproxy/middleware/basicauth"
+	"github.com/ryanbekhen/nanoproxy/middleware/hopbyhop"
 	"github.com/ryanbekhen/nanoproxy/webproxy"
-	"github.com/valyala/fasthttp"
 	"os"
 	"time"
 	_ "time/tzdata"
@@ -17,30 +21,39 @@ func main() {
 	time.Local = loc
 
 	logLevel := zerolog.InfoLevel
-	if cfg.Debug {
+	if cfg.Debug() {
 		logLevel = zerolog.DebugLevel
 	}
 
 	logger := log.Level(logLevel).Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339}).
 		With().Timestamp().Logger()
 
-	// validate protocol is http or https only
-	if cfg.Proto != "http" && cfg.Proto != "https" {
-		logger.Fatal().Msg("Protocol must be http or https")
+	// validate config
+	if err := cfg.Validate(); err != nil {
+		logger.Fatal().Msg(err.Error())
 	}
 
-	srv := webproxy.New(cfg.BasicAuth, cfg.TunnelTimeout, logger)
-	server := &fasthttp.Server{
-		Handler: srv.Handler,
-		Logger:  &logger,
-	}
+	server := fiber.New(fiber.Config{DisableStartupMessage: true})
+	srv := webproxy.New(cfg.TunnelTimeout())
 
-	logger.Info().Msg("Listening on " + cfg.Addr)
-	if cfg.Proto == "https" {
-		err := server.ListenAndServeTLS(cfg.Addr, cfg.PemPath, cfg.KeyPath)
-		logger.Fatal().Msg("ListenAndServeTLS: " + err.Error())
+	// middleware
+	server.Use(recoverFiber.New())
+	server.Use(basicauth.New(basicauth.Config{Users: cfg.BasicAuth()}))
+	server.Use(hopbyhop.New())
+	server.Use(fiberzerolog.New(fiberzerolog.Config{Logger: &logger}))
+
+	// routes
+	server.All("*", srv.Handler)
+
+	// start server
+	logger.Info().Msgf("Starting server on %s", cfg.Addr())
+	if cfg.IsHTTPS() {
+		logger.Fatal().
+			Err(server.ListenTLS(cfg.Addr(), cfg.PemPath(), cfg.KeyPath())).
+			Msg("Server closed")
 	} else {
-		err := server.ListenAndServe(cfg.Addr)
-		logger.Fatal().Msg("ListenAndServe: " + err.Error())
+		logger.Fatal().
+			Err(server.Listen(cfg.Addr())).
+			Msg("Server closed")
 	}
 }

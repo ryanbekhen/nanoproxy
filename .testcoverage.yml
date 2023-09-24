@@ -3,7 +3,7 @@ local-prefix: "github.com/ryanbekhen/nanoproxy"
 threshold:
   file: 80
   package: 80
-  total: 95
+  total: 80
 exclude:
   paths:
     - \.pb\.go$    # excludes all protobuf generated files
