@@ -5,7 +5,7 @@ go 1.21
 require (
 	github.com/gofiber/contrib/fiberzerolog v0.2.2
 	github.com/gofiber/fiber/v2 v2.49.2
-	github.com/rs/zerolog v1.30.0
+	github.com/rs/zerolog v1.31.0
 	github.com/valyala/fasthttp v1.50.0
 )
 
