@@ -197,7 +197,9 @@ func (s *Server) handleConnect(ctx context.Context, conn conn, req *Request) err
 		}
 		return fmt.Errorf("connect to %v failed: %v", req.DestAddr, err)
 	}
-	defer target.Close()
+	defer func(target net.Conn) {
+		_ = target.Close()
+	}(target)
 
 	// Send success
 	local := target.LocalAddr().(*net.TCPAddr)
@@ -367,7 +369,7 @@ type closeWriter interface {
 func proxy(dst io.Writer, src io.Reader, errCh chan error) {
 	_, err := io.Copy(dst, src)
 	if tcpConn, ok := dst.(closeWriter); ok {
-		tcpConn.CloseWrite()
+		_ = tcpConn.CloseWrite()
 	}
 	errCh <- err
 }
