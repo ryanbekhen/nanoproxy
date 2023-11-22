@@ -3,8 +3,12 @@
 ![coverage](https://raw.githubusercontent.com/ryanbekhen/nanoproxy/badges/.badges/master/coverage.svg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/ryanbekhen/nanoproxy?cache=v1)](https://goreportcard.com/report/github.com/vladopajic/go-test-coverage)
 
-NanoProxy is a lightweight HTTP proxy server designed to provide basic proxying functionality. 
-It supports handling HTTP requests and tunneling for HTTPS. NanoProxy is written in Go and built on top of Fiber.
+Note: This code includes modifications from the original go-socks5 project (https://github.com/armon/go-socks5)
+Modifications have been made as part of maintenance for NanoProxy.
+This version is licensed under the MIT license.
+
+NanoProxy is a lightweight SOCKS5 proxy server written in Go. It is designed to be simple, minimalistic, and easy to
+use.
 
 > ⚠️ **Notice:** NanoProxy is currently in pre-production stage. While it provides essential proxying capabilities, 
 > please be aware that it is still under active development. Full backward compatibility is not guaranteed until 
@@ -13,10 +17,10 @@ It supports handling HTTP requests and tunneling for HTTPS. NanoProxy is written
 
 ## Data Flow Through Proxy
 
-NanoProxy acts as an intermediary between user requests and the destination server. When a user makes a request, 
-NanoProxy forwards the request to the destination server. The destination server processes the request and responds 
-back to NanoProxy, which then sends the response back to the user. This allows NanoProxy to intercept and manage 
-network traffic effectively.
+NanoProxy acts as a proxy server that forwards network traffic between the user and the destination server.
+When a user makes a request, the request is sent to the proxy server. The proxy server then forwards the request to
+the destination server. The destination server processes the request and responds back to the proxy server, which then
+sends the response back to the user. This allows the proxy server to intercept and manage network traffic effectively.
 
 Here's how the data flows through the proxy:
 
@@ -30,17 +34,15 @@ Here's how the data flows through the proxy:
                                       `-----------------'
 ```
 
-This clear separation of responsibilities helps optimize network communication and enables various 
-proxy-related functionalities.
+This clear separation of responsibilities helps optimize network communication and enables various proxy-related
+functionalities.
 
 ## Features
 
-- **Simple and minimalistic HTTP proxy server.** NanoProxy is designed with simplicity in mind, making it easy to set 
-up and use for various purposes.
-- **Handles both HTTP requests and tunneling (CONNECT) for HTTPS.** NanoProxy supports both HTTP requests and tunneling, 
-allowing you to proxy regular HTTP requests as well as secure HTTPS connections.
-- **Lightweight and easy to configure.** With a small footprint and straightforward configuration options, NanoProxy is 
-a lightweight solution that can be quickly configured to suit your needs.
+NanoProxy provides the following features:
+
+- **SOCKS5 proxy server.** NanoProxy is a SOCKS5 proxy server that can be used to proxy network traffic for various
+applications.
 
 ## Installation
 
@@ -48,7 +50,7 @@ You can easily install NanoProxy using your package manager by adding the offici
 
 ### Debian and Ubuntu
 
-Add the NanoProxy repository to your sources list:
+Add the NanoProxy repository to your source list:
 
 ```shell
 echo "deb [trusted=yes] https://repo.ryanbekhen.dev/apt/ /" | sudo tee /etc/apt/sources.list.d/ryanbekhen.list
@@ -83,7 +85,7 @@ sudo yum install nanoproxy
 
 ## Usage
 
-After installing NanoProxy using the provided packages (.deb or .rpm) or accessed it through the repository,
+After installing NanoProxy using the provided packages (.deb or .rpm) or accessing it through the repository,
 you can manage NanoProxy as a service using the system's service management tool (systemd). To enable NanoProxy to start 
 automatically on system boot, run the following command:
 
@@ -104,35 +106,35 @@ sudo systemctl start nanoproxy
 You can also run NanoProxy using Docker. To do so, you can use the following command:
 
 ```shell
-docker run -p 8080:8080 ghcr.io/ryanbekhen/nanoproxy:latest
+docker run -p 1080:1080 ghcr.io/ryanbekhen/nanoproxy:latest
 ```
 
 ## Configuration
 
-You can modify the behavior of NanoProxy by adjusting the command line flags when running the proxy. The available flags are:
-
-- `-addr`: Proxy listen address (default: :8080).
-- `-pem`: Path to the PEM file for TLS (HTTPS) support.
-- `-key`: Path to the private key file for TLS.
-- `-proto`: Proxy protocol `http` or `https`. If set to `https`, the `-pem` and `-key` flags must be set.
-- `-timeout`: Timeout duration for tunneling connections (default: 15 seconds).
-- `-auth`: Basic authentication credentials in the form of `username:password`.
-- `-debug`: Enable debug mode.
-
-You can set the configuration using environment variables. Create a file
-at `/etc/nanoproxy/nanoproxy.env` and add the desired values:
+You can also set the configuration using environment variables. Create a file at `/etc/nanoproxy/nanoproxy` and add the
+desired values:
 
 ```text
 ADDR=:8080
-PROTO=http
-PEM=server.pem
-KEY=server.key
-TIMEOUT=15s
-AUTH=user:pass
+NETWORK=tcp
 TZ=Asia/Jakarta
 ```
 
-Modify these flags or environment variables according to your requirements.
+The following table lists the available configuration options:
+
+| Name | Description | Default Value |
+|------|-------------|---------------|
+| ADDR | The address to listen on. | `:1080` |
+| NETWORK | The network to listen on. | `tcp` |
+| TZ | The timezone to use. | `Local` |
+
+## Logging
+
+NanoProxy logs all requests and responses to the standard output. You can use the `journalctl` command to view the logs:
+
+```shell
+journalctl -u nanoproxy
+```
 
 ## Testing
 
@@ -155,8 +157,8 @@ Contributions are welcome! Feel free to open issues and submit pull requests.
 
 ## Security
 
-If you discover any security related issues, please email i@ryanbekhen.dev instead of using the issue tracker.
+If you discover any security-related issues, please email i@ryanbekhen.dev instead of using the issue tracker.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License—see the [LICENSE](LICENSE) file for details.

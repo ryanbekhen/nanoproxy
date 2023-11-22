@@ -1,62 +1,40 @@
 package main
 
 import (
-	"github.com/gofiber/contrib/fiberzerolog"
-	"github.com/gofiber/fiber/v2"
-	recoverFiber "github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/caarlos0/env/v10"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
-	"github.com/ryanbekhen/nanoproxy/config"
-	"github.com/ryanbekhen/nanoproxy/middleware/basicauth"
-	"github.com/ryanbekhen/nanoproxy/middleware/hopbyhop"
-	"github.com/ryanbekhen/nanoproxy/webproxy"
+	"github.com/ryanbekhen/nanoproxy/pkg/config"
+	"github.com/ryanbekhen/nanoproxy/pkg/socks5"
 	"os"
 	"time"
+
 	_ "time/tzdata"
 )
 
 func main() {
-	cfg := config.New()
-	loc, _ := time.LoadLocation(os.Getenv("TZ"))
-	time.Local = loc
+	cfg := &config.Config{}
+	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}).With().Timestamp().Logger()
 
-	logLevel := zerolog.InfoLevel
-	if cfg.Debug() {
-		logLevel = zerolog.DebugLevel
-	}
-
-	logger := log.Level(logLevel).Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339}).
-		With().Timestamp().Logger()
-
-	// validate config
-	if err := cfg.Validate(); err != nil {
+	if err := env.Parse(cfg); err != nil {
 		logger.Fatal().Msg(err.Error())
 	}
 
-	server := fiber.New(fiber.Config{DisableStartupMessage: true})
-	srv := webproxy.New(cfg.TunnelTimeout())
+	loc, _ := time.LoadLocation(cfg.Timezone)
+	if loc != nil {
+		time.Local = loc
+	}
 
-	// middleware
-	server.Use(recoverFiber.New())
-	server.Use(basicauth.New(basicauth.Config{Users: cfg.BasicAuth()}))
-	server.Use(hopbyhop.New())
-	server.Use(fiberzerolog.New(fiberzerolog.Config{
+	socks5Config := &socks5.Config{
 		Logger: &logger,
-		Fields: []string{"ip", "latency", "status", "url", "error"},
-	}))
+	}
 
-	// routes
-	server.All("*", srv.Handler)
+	sock5Server, err := socks5.New(socks5Config)
+	if err != nil {
+		logger.Fatal().Msg(err.Error())
+	}
 
-	// start server
-	logger.Info().Msgf("Starting server on %s", cfg.Addr())
-	if cfg.IsHTTPS() {
-		logger.Fatal().
-			Err(server.ListenTLS(cfg.Addr(), cfg.PemPath(), cfg.KeyPath())).
-			Msg("Server closed")
-	} else {
-		logger.Fatal().
-			Err(server.Listen(cfg.Addr())).
-			Msg("Server closed")
+	logger.Info().Msgf("Starting socks5 server on %s://%s", cfg.Network, cfg.ADDR)
+	if err := sock5Server.ListenAndServe(cfg.Network, cfg.ADDR); err != nil {
+		logger.Fatal().Msg(err.Error())
 	}
 }

@@ -5,7 +5,7 @@ After=network.target
 [Service]
 EnvironmentFile=/etc/nanoproxy/nanoproxy
 ExecStart=/usr/bin/nanoproxy
-WorkingDirectory=/etc/nanoproxy/
+WorkingDirectory=/usr/bin
 Restart=always
 User=root
 
