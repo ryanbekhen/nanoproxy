@@ -22,3 +22,11 @@ func TestStaticCredentials(t *testing.T) {
 		t.Fatalf("expect invalid")
 	}
 }
+
+func TestStaticCredentials_Empty(t *testing.T) {
+	credentials := StaticCredentials{}
+
+	if credentials.Valid("foo", "bar") {
+		t.Fatalf("expect invalid")
+	}
+}

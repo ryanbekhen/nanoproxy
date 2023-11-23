@@ -374,7 +374,7 @@ func proxy(dst io.Writer, src io.Reader, errCh chan error) {
 	errCh <- err
 }
 
-func parseCommand(cmd uint8) string {
+func CommandToString(cmd uint8) string {
 	switch cmd {
 	case ConnectCommand:
 		return "connect"

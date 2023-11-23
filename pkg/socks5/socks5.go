@@ -121,10 +121,7 @@ func (s *Server) Serve(l net.Listener) error {
 // ServeConn is used to serve a single connection.
 func (s *Server) ServeConn(conn net.Conn) {
 	defer func(conn net.Conn) {
-		err := conn.Close()
-		if err != nil {
-			s.config.Logger.Err(err).Msg("failed to close connection")
-		}
+		_ = conn.Close()
 	}(conn)
 	bufConn := bufio.NewReader(conn)
 
@@ -171,7 +168,7 @@ func (s *Server) ServeConn(conn net.Conn) {
 
 	s.config.Logger.Info().
 		Str("remote_addr", conn.RemoteAddr().String()).
-		Str("command", parseCommand(request.Command)).
+		Str("command", CommandToString(request.Command)).
 		Str("dest_addr", request.DestAddr.String()).
 		Str("latency", request.Latency.String()).
 		Msg("request processed")

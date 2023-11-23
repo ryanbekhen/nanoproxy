@@ -176,3 +176,15 @@ func TestRequest_Connect_RuleFail(t *testing.T) {
 		t.Fatalf("bad: %v %v", out, expected)
 	}
 }
+
+func TestCommandToString(t *testing.T) {
+	if CommandToString(ConnectCommand) != "connect" {
+		t.Fatal("bad")
+	} else if CommandToString(BindCommand) != "bind" {
+		t.Fatal("bad")
+	} else if CommandToString(AssociateCommand) != "associate" {
+		t.Fatal("bad")
+	} else if CommandToString(0) != "unknown" {
+		t.Fatal("bad")
+	}
+}

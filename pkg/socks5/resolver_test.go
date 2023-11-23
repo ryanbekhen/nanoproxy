@@ -19,3 +19,13 @@ func TestDNSResolver(t *testing.T) {
 		t.Fatalf("expected loopback")
 	}
 }
+
+func TestDNSResolver_Invalid(t *testing.T) {
+	d := DNSResolver{}
+	ctx := context.Background()
+
+	_, _, err := d.Resolve(ctx, "invalid.invalid")
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+}
