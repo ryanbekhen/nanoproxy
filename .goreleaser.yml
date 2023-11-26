@@ -2,6 +2,18 @@ project_name: nanoproxy
 dist: dist
 before:
   hooks:
+    - touch ~/nanoproxy
+    - echo '[Unit]
+      Description=NanoProxy is a simple reverse proxy written in Go
+      After=network.target
+      [Service]
+      EnvironmentFile=/etc/nanoproxy/nanoproxy
+      ExecStart=/usr/bin/nanoproxy
+      WorkingDirectory=/usr/bin
+      Restart=always
+      User=root
+      [Install]
+      WantedBy=multi-user.target' > ~/nanoproxy.service
     - go mod tidy
 
 builds:
@@ -38,10 +50,10 @@ nfpms:
     license: "MIT"
     vendor: ryanbekhen
     contents:
-      - src: systemd/nanoproxy.service
+      - src: ~/nanoproxy.service
         dst: /etc/systemd/system/nanoproxy.service
         type: "config|noreplace"
-      - src: config/nanoproxy
+      - src: ~/nanoproxy
         dst: /etc/nanoproxy/nanoproxy
         type: "config|noreplace"
     formats:
