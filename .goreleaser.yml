@@ -82,7 +82,7 @@ winget:
     license_url: https://github.com/ryanbekhen/nanoproxy/blob/master/LICENSE
     homepage: https://github.com/ryanbekhen/nanoproxy
     author: ryanbekhen
-    release_notes: {{.Changelog}}
+    release_notes: "{{.Changelog}}"
     copyright: ryanbekhen
     copyright_url: https://github.com/ryanbekhen/nanoproxy/blob/master/LICENSE
     tags:
