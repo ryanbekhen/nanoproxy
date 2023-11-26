@@ -57,6 +57,10 @@ brews:
     folder: Formula
     install: |
       bin.install "nanoproxy"
+    repository:
+      owner: ryanbekhen
+      name: nanoproxy
+      branch: master
 
 winget:
   - name: nanoproxy
@@ -76,6 +80,10 @@ winget:
     tags:
       - Proxy
       - Socks5
+    repository:
+      owner: ryanbekhen
+      name: nanoproxy
+      branch: master
 
 release:
   draft: false
