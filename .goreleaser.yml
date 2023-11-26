@@ -2,7 +2,6 @@ project_name: nanoproxy
 dist: dist
 before:
   hooks:
-    - mkdir -p /etc/nanoproxy
     - touch ~/nanoproxy
     - echo '[Unit]
       Description=NanoProxy is a simple reverse proxy written in Go
