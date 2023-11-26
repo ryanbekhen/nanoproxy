@@ -101,6 +101,14 @@ To start the service, run:
 sudo systemctl start nanoproxy
 ```
 
+## Running on Terminal/Command Prompt
+
+You can also run NanoProxy directly on your terminal/command prompt. To do so, you can use the following command:
+
+```shell
+nanoproxy
+```
+
 ## Running on Docker
 
 You can also run NanoProxy using Docker. To do so, you can use the following command:
@@ -142,7 +150,7 @@ To test the proxy using cURL, you can use the `-x` flag followed by the proxy UR
 homepage using the proxy running on `localhost:8080`, use the following command:
 
 ```shell
-curl -x localhost:8080 https://www.google.com
+curl -x socks5://localhost:1080 https://google.com
 ```
 
 Replace localhost:8080 with the actual address and port where your NanoProxy instance is running. This command instructs 
