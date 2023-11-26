@@ -83,7 +83,7 @@ release:
 publishers:
   - name: fury.io
     dir: "{{ dir .ArtifactPath }}"
-    cmd: 'if [[ {{ .ArtifactName }} == *.deb || {{ .ArtifactName }} == *.rpm ]]; then curl -F package=@{{ .ArtifactName }} https://{{ .Env.FURY_TOKEN }}@push.fury.io/ryanbekhen/; fi'
+    cmd: curl -F package=@{{ .ArtifactName }} https://{{ .Env.FURY_TOKEN }}@push.fury.io/ryanbekhen/
 
 archives:
   - name_template: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
