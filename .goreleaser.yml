@@ -2,9 +2,21 @@ project_name: nanoproxy
 dist: dist
 before:
   hooks:
+    - touch .env
+    - echo '[Unit]
+      Description=NanoProxy is a simple reverse proxy written in Go
+      After=network.target
+      [Service]
+      EnvironmentFile=/etc/nanoproxy/nanoproxy
+      ExecStart=/usr/bin/nanoproxy
+      WorkingDirectory=/usr/bin
+      Restart=always
+      User=root
+      [Install]
+      WantedBy=multi-user.target' > nanoproxy.service
     - go mod tidy
-builds:
 
+builds:
   - binary: nanoproxy
     ldflags:
       - -s -w -X github.com/ryanbekhen/nanoproxy.Version={{ .Version }}
@@ -12,6 +24,9 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
+      - darwin
+      - windows
+
 dockers:
   - image_templates:
       - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}"
@@ -35,10 +50,10 @@ nfpms:
     license: "MIT"
     vendor: ryanbekhen
     contents:
-      - src: systemd/nanoproxy.service
+      - src: nanoproxy.service
         dst: /etc/systemd/system/nanoproxy.service
         type: "config|noreplace"
-      - src: .env.sample
+      - src: .env
         dst: /etc/nanoproxy/nanoproxy
         type: "config|noreplace"
     formats:
@@ -46,13 +61,41 @@ nfpms:
       - deb
       - rpm
 
+brews:
+  - name: nanoproxy
+    homepage: https://github.com/ryanbekhen/nanoproxy
+    description: "nanoproxy is a simple reverse proxy written in Go."
+    license: "MIT"
+    folder: Formula
+    install: |
+      bin.install "nanoproxy"
+
+winget:
+  - name: nanoproxy
+    package_identifier: ryanbekhen.nanoproxy
+    publisher: ryanbekhen
+    description: "nanoproxy is a simple reverse proxy written in Go."
+    short_description: "nanoproxy is a simple reverse proxy written in Go."
+    publisher_url: https://ryanbekhen.dev
+    publisher_support_url: https://ryanbekhen.dev
+    license: MIT
+    license_url: https://github.com/ryanbekhen/nanoproxy/blob/master/LICENSE
+    homepage: https://github.com/ryanbekhen/nanoproxy
+    author: ryanbekhen
+    release_notes: {{.Changelog}}
+    copyright: ryanbekhen
+    copyright_url: https://github.com/ryanbekhen/nanoproxy/blob/master/LICENSE
+    tags:
+      - Proxy
+      - Socks5
+
 release:
   draft: false
 
 publishers:
   - name: fury.io
     dir: "{{ dir .ArtifactPath }}"
-    cmd: curl -F package=@{{ .ArtifactName }} https://{{ .Env.FURY_TOKEN }}@push.fury.io/ryanbekhen/
+    cmd: 'if [[ {{ .ArtifactName }} == *.deb || {{ .ArtifactName }} == *.rpm ]]; then curl -F package=@{{ .ArtifactName }} https://{{ .Env.FURY_TOKEN }}@push.fury.io/ryanbekhen/; fi'
 
 archives:
   - name_template: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'

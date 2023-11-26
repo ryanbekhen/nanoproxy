@@ -5,6 +5,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/ryanbekhen/nanoproxy/pkg/config"
 	"github.com/ryanbekhen/nanoproxy/pkg/socks5"
+	"net"
 	"os"
 	"time"
 
@@ -24,14 +25,18 @@ func main() {
 		time.Local = loc
 	}
 
-	socks5Config := &socks5.Config{
+	socks5Config := socks5.Config{
 		Logger: &logger,
+		AfterRequest: func(req *socks5.Request, conn net.Conn) {
+			logger.Info().
+				Str("client_addr", conn.RemoteAddr().String()).
+				Str("dest_addr", req.DestAddr.String()).
+				Str("latency", req.Latency.String()).
+				Msg("request processed")
+		},
 	}
 
-	sock5Server, err := socks5.New(socks5Config)
-	if err != nil {
-		logger.Fatal().Msg(err.Error())
-	}
+	sock5Server := socks5.New(&socks5Config)
 
 	logger.Info().Msgf("Starting socks5 server on %s://%s", cfg.Network, cfg.ADDR)
 	if err := sock5Server.ListenAndServe(cfg.Network, cfg.ADDR); err != nil {

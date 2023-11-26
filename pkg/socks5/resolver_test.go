@@ -1,31 +1,22 @@
 package socks5
 
 import (
+	"github.com/stretchr/testify/assert"
 	"testing"
-
-	"context"
 )
 
-func TestDNSResolver(t *testing.T) {
-	d := DNSResolver{}
-	ctx := context.Background()
-
-	_, addr, err := d.Resolve(ctx, "localhost")
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
-
-	if !addr.IsLoopback() {
-		t.Fatalf("expected loopback")
-	}
+func Test_Resolver_Resolve(t *testing.T) {
+	var r Resolver
+	r = &DNSResolver{}
+	ip, err := r.Resolve("www.google.com")
+	assert.NoError(t, err)
+	assert.NotNil(t, ip)
 }
 
-func TestDNSResolver_Invalid(t *testing.T) {
-	d := DNSResolver{}
-	ctx := context.Background()
-
-	_, _, err := d.Resolve(ctx, "invalid.invalid")
-	if err == nil {
-		t.Fatalf("expected error")
-	}
+func Test_Resolver_Resolve_Error(t *testing.T) {
+	var r Resolver
+	r = &DNSResolver{}
+	ip, err := r.Resolve("10.0.0.1.2")
+	assert.Error(t, err)
+	assert.Nil(t, ip)
 }

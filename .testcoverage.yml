@@ -1,9 +1,9 @@
 profile: cover.out
 local-prefix: "github.com/ryanbekhen/nanoproxy"
 threshold:
-  file: 50
-  package: 60
-  total: 60
+  file: 60
+  package: 80
+  total: 80
 exclude:
   paths:
     - \.pb\.go$    # excludes all protobuf generated files
