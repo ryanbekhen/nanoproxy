@@ -5,7 +5,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/ryanbekhen/nanoproxy/pkg/config"
 	"github.com/ryanbekhen/nanoproxy/pkg/socks5"
-	"net"
 	"os"
 	"time"
 
@@ -30,13 +29,6 @@ func main() {
 		Resolver:          &socks5.DNSResolver{},
 		ClientConnTimeout: cfg.ClientTimeout,
 		DestConnTimeout:   cfg.DestTimeout,
-		AfterRequest: func(req *socks5.Request, conn net.Conn) {
-			logger.Info().
-				Str("client_addr", conn.RemoteAddr().String()).
-				Str("dest_addr", req.DestAddr.String()).
-				Str("latency", req.Latency.String()).
-				Msg("request processed")
-		},
 	}
 
 	sock5Server := socks5.New(&socks5Config)

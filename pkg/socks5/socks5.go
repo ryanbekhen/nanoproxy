@@ -3,7 +3,6 @@ package socks5
 import (
 	"bufio"
 	"errors"
-	"fmt"
 	"github.com/rs/zerolog"
 	"net"
 	"os"
@@ -149,9 +148,16 @@ func (s *Server) handleConnection(conn net.Conn) {
 		request.RemoteAddr = &AddrSpec{IP: clientAddr.IP, Port: clientAddr.Port}
 	}
 
-	if err := s.handleRequest(request, conn); err != nil {
-		s.config.Logger.Err(err).Msg("failed to handle request")
-		return
+	if err := s.handleRequest(request, conn); err != nil &&
+		!strings.Contains(err.Error(), "i/o timeout") {
+		s.config.Logger.Err(err).
+			Msg("request failed")
+	} else {
+		s.config.Logger.Info().
+			Str("client_addr", conn.RemoteAddr().String()).
+			Str("dest_addr", request.DestAddr.String()).
+			Str("latency", request.Latency.String()).
+			Msg("request completed")
 	}
 
 	if s.config.AfterRequest != nil {
@@ -200,7 +206,7 @@ func (s *Server) handleRequest(req *Request, conn net.Conn) error {
 	//	return s.handleAssociate(conn, req)
 	default:
 		if err := sendReply(conn, StatusCommandNotSupported.Uint8(), nil); err != nil {
-			return fmt.Errorf("failed to send reply: %w", err)
+			return ErrFailedToSendReply
 		}
 		return ErrUnsupportedCommand
 	}
@@ -228,7 +234,7 @@ func (s *Server) handleConnect(conn net.Conn, req *Request) error {
 		}
 
 		if err := sendReply(conn, resp.Uint8(), nil); err != nil {
-			return fmt.Errorf("failed to send reply: %w", err)
+			return ErrFailedToSendReply
 		}
 		return ErrFailedToConnect
 	}
@@ -239,7 +245,7 @@ func (s *Server) handleConnect(conn net.Conn, req *Request) error {
 	local := dest.LocalAddr().(*net.TCPAddr)
 	bind := AddrSpec{IP: local.IP, Port: local.Port}
 	if err := sendReply(conn, StatusRequestGranted.Uint8(), &bind); err != nil {
-		return fmt.Errorf("failed to send reply: %w", err)
+		return ErrFailedToSendReply
 	}
 
 	errChan := make(chan error, 2)
