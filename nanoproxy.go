@@ -26,7 +26,10 @@ func main() {
 	}
 
 	socks5Config := socks5.Config{
-		Logger: &logger,
+		Logger:            &logger,
+		Resolver:          &socks5.DNSResolver{},
+		ClientConnTimeout: cfg.ClientTimeout,
+		DestConnTimeout:   cfg.DestTimeout,
 		AfterRequest: func(req *socks5.Request, conn net.Conn) {
 			logger.Info().
 				Str("client_addr", conn.RemoteAddr().String()).
