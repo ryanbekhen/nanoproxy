@@ -3,6 +3,7 @@ package socks5
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"github.com/rs/zerolog"
 	"net"
 	"os"
@@ -169,7 +170,7 @@ func (s *Server) authenticate(conn net.Conn, bufConn *bufio.Reader) (*AuthContex
 	// Get the methods
 	methods, err := readMethods(bufConn)
 	if err != nil {
-		return nil, ErrFailedToGetAuthMethods
+		return nil, fmt.Errorf("failed to read methods: %w", err)
 	}
 
 	// Select a usable method
@@ -191,7 +192,7 @@ func (s *Server) handleRequest(req *Request, conn net.Conn) error {
 			if err := sendReply(conn, StatusHostUnreachable.Uint8(), nil); err != nil {
 				return ErrFailedToSendReply
 			}
-			return ErrFailedToResolveDestination
+			return fmt.Errorf("failed to resolve destination: %w", err)
 		}
 		dest.IP = addr
 	}
@@ -208,7 +209,7 @@ func (s *Server) handleRequest(req *Request, conn net.Conn) error {
 		if err := sendReply(conn, StatusCommandNotSupported.Uint8(), nil); err != nil {
 			return ErrFailedToSendReply
 		}
-		return ErrUnsupportedCommand
+		return fmt.Errorf("unsupported command: %d", req.Command)
 	}
 }
 
@@ -229,14 +230,19 @@ func (s *Server) handleConnect(conn net.Conn, req *Request) error {
 		resp := StatusHostUnreachable
 		if strings.Contains(msg, "refused") {
 			resp = StatusConnectionRefused
-		} else if strings.Contains(msg, "network is unreachable") {
+			msg = "connection refused " + req.DestAddr.IP.String()
+		}
+
+		if strings.Contains(msg, "unreachable network") {
 			resp = StatusNetworkUnreachable
+			msg = "unreachable network " + req.DestAddr.IP.String()
 		}
 
 		if err := sendReply(conn, resp.Uint8(), nil); err != nil {
 			return ErrFailedToSendReply
 		}
-		return ErrFailedToConnect
+
+		return errors.New(msg)
 	}
 	defer func() {
 		_ = dest.Close()

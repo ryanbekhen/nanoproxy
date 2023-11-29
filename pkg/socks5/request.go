@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -18,6 +19,10 @@ type AddrSpec struct {
 func (a *AddrSpec) String() string {
 	if a.FQDN != "" {
 		return fmt.Sprintf("%s (%s):%d", a.FQDN, a.IP, a.Port)
+	}
+	// Check if the address is an IPv6 address
+	if strings.Count(a.IP.String(), ":") > 1 {
+		return fmt.Sprintf("[%s]:%d", a.IP, a.Port)
 	}
 	return fmt.Sprintf("%s:%d", a.IP, a.Port)
 }
@@ -36,11 +41,11 @@ type Request struct {
 func NewRequest(bufferConn io.Reader) (*Request, error) {
 	header := []byte{0, 0, 0}
 	if _, err := io.ReadAtLeast(bufferConn, header, 3); err != nil {
-		return nil, ErrInvalidHeader
+		return nil, fmt.Errorf("failed to read header: %w", err)
 	}
 
 	if header[0] != Version {
-		return nil, ErrUnsupportedVersion
+		return nil, fmt.Errorf("unsupported version: %d", header[0])
 	}
 
 	dest, err := readAddressSpec(bufferConn)
@@ -88,7 +93,7 @@ func readAddressSpec(r io.Reader) (*AddrSpec, error) {
 		}
 		addr.FQDN = string(domain)
 	default:
-		return nil, ErrInvalidAddressType
+		return nil, fmt.Errorf("unrecognized address type: %d", addrType[0])
 	}
 
 	port := []byte{0, 0}
@@ -126,7 +131,7 @@ func sendReply(conn io.Writer, reply uint8, addr *AddrSpec) error {
 		addrPort = uint16(addr.Port)
 
 	default:
-		return ErrInvalidAddressType
+		return fmt.Errorf("unrecognized address type: %v", addr)
 	}
 
 	// Format the message

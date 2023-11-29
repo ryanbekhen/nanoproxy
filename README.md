@@ -10,9 +10,9 @@ This version is licensed under the MIT license.
 NanoProxy is a lightweight SOCKS5 proxy server written in Go. It is designed to be simple, minimalistic, and easy to
 use.
 
-> ⚠️ **Notice:** NanoProxy is currently in pre-production stage. While it provides essential proxying capabilities, 
-> please be aware that it is still under active development. Full backward compatibility is not guaranteed until 
-> reaching a stable release. We recommend caution when using NanoProxy for critical production applications. Make sure 
+> ⚠️ **Notice:** NanoProxy is currently in pre-production stage. While it provides essential proxying capabilities,
+> please be aware that it is still under active development. Full backward compatibility is not guaranteed until
+> reaching a stable release. We recommend caution when using NanoProxy for critical production applications. Make sure
 > to keep an eye on the changelog and be prepared for manual migration steps as the project evolves.
 
 ## Data Flow Through Proxy
@@ -42,7 +42,7 @@ functionalities.
 NanoProxy provides the following features:
 
 - **SOCKS5 proxy server.** NanoProxy is a SOCKS5 proxy server that can be used to proxy network traffic for various
-applications.
+  applications.
 
 ## Installation
 
@@ -78,6 +78,7 @@ EOF
 ```
 
 Now, you can install NanoProxy using yum:
+
 ```shell
 sudo yum update
 sudo yum install nanoproxy
@@ -86,7 +87,7 @@ sudo yum install nanoproxy
 ## Usage
 
 After installing NanoProxy using the provided packages (.deb or .rpm) or accessing it through the repository,
-you can manage NanoProxy as a service using the system's service management tool (systemd). To enable NanoProxy to start 
+you can manage NanoProxy as a service using the system's service management tool (systemd). To enable NanoProxy to start
 automatically on system boot, run the following command:
 
 To enable automatic startup on system boot, run:
@@ -123,18 +124,22 @@ You can also set the configuration using environment variables. Create a file at
 desired values:
 
 ```text
-ADDR=:8080
+ADDR=:1080
 NETWORK=tcp
 TZ=Asia/Jakarta
+CLIENT_TIMEOUT=10s
+DNS_TIMEOUT=10s
 ```
 
 The following table lists the available configuration options:
 
-| Name | Description | Default Value |
-|------|-------------|---------------|
-| ADDR | The address to listen on. | `:1080` |
-| NETWORK | The network to listen on. | `tcp` |
-| TZ | The timezone to use. | `Local` |
+| Name           | Description                                           | Default Value |
+|----------------|-------------------------------------------------------|---------------|
+| ADDR           | The address to listen on.                             | `:1080`       |
+| NETWORK        | The network to listen on. (tcp, tcp4, tcp6)           | `tcp`         |
+| TZ             | The timezone to use.                                  | `Local`       |
+| CLIENT_TIMEOUT | The timeout for connecting to the destination server. | `10s`         |
+| DNS_TIMEOUT    | The timeout for DNS resolution.                       | `10s`         |
 
 ## Logging
 
@@ -146,17 +151,17 @@ journalctl -u nanoproxy
 
 ## Testing
 
-To test the proxy using cURL, you can use the `-x` flag followed by the proxy URL. For example, to fetch the Google 
+To test the proxy using cURL, you can use the `-x` flag followed by the proxy URL. For example, to fetch the Google
 homepage using the proxy running on `localhost:8080`, use the following command:
 
 ```shell
 curl -x socks5://localhost:1080 https://google.com
 ```
 
-Replace localhost:8080 with the actual address and port where your NanoProxy instance is running. This command instructs 
+Replace localhost:8080 with the actual address and port where your NanoProxy instance is running. This command instructs
 cURL to use the specified proxy for the request, allowing you to see the request and response through the proxy server.
 
-Remember that you can adjust the proxy address and port as needed based on your setup. This is a convenient way to 
+Remember that you can adjust the proxy address and port as needed based on your setup. This is a convenient way to
 verify that NanoProxy is correctly intercepting and forwarding the traffic.
 
 ## Contributions

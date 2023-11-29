@@ -31,8 +31,7 @@ const (
 )
 
 var (
-	ErrAuthFailure     = fmt.Errorf("authentication failure")
-	ErrNoSupportedAuth = fmt.Errorf("no supported authentication mechanism")
+	ErrAuthFailure = fmt.Errorf("authentication failure")
 )
 
 // AuthContext encapsulates authentication state provided during negotiation
@@ -89,7 +88,7 @@ func (a *UserPassAuthenticator) Authenticate(reader io.Reader, writer io.Writer)
 
 	// Ensure we are compatible
 	if header[0] != UserAuthVersion {
-		return nil, ErrUnsupportedAuthVersion
+		return nil, fmt.Errorf("unsupported authentication version: %d", header[0])
 	}
 
 	// Get the username
@@ -120,7 +119,7 @@ func (a *UserPassAuthenticator) Authenticate(reader io.Reader, writer io.Writer)
 		if _, err := writer.Write([]byte{UserAuthVersion, uint8(AuthFailure)}); err != nil {
 			return nil, err
 		}
-		return nil, ErrAuthFailure
+		return nil, fmt.Errorf("invalid credentials")
 	}
 
 	return &AuthContext{UserPassAuth, map[string]string{"Username": string(user)}}, nil
@@ -144,5 +143,5 @@ func noAcceptable(conn io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return ErrNoSupportedAuth
+	return fmt.Errorf("no acceptable authentication method")
 }

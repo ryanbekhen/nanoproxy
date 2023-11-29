@@ -62,7 +62,7 @@ func TestUserPassAuthenticator_Authenticate(t *testing.T) {
 	writer := bytes.NewBuffer(nil)
 
 	_, err := auth.Authenticate(reader, writer)
-	assert.Equal(t, ErrAuthFailure, err)
+	assert.Equal(t, "invalid credentials", err.Error())
 
 	expected := []byte{Version, uint8(UserPassAuth), UserAuthVersion, uint8(AuthFailure)}
 	assert.Equal(t, expected, writer.Bytes())
@@ -76,7 +76,7 @@ func TestUserPassAuthenticator_Authenticate_InvalidVersion(t *testing.T) {
 	writer := bytes.NewBuffer(nil)
 
 	_, err := auth.Authenticate(reader, writer)
-	assert.Equal(t, ErrUnsupportedAuthVersion, err)
+	assert.Equal(t, "unsupported authentication version: 0", err.Error())
 
 	expected := []byte{Version, uint8(UserPassAuth)}
 	assert.Equal(t, expected, writer.Bytes())

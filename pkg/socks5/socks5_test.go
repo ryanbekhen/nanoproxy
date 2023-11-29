@@ -337,7 +337,7 @@ func TestRequest_NetworkUnreachable(t *testing.T) {
 	s := &Server{
 		config: &Config{
 			Dial: func(network, addr string) (net.Conn, error) {
-				return nil, errors.New("network is unreachable")
+				return nil, errors.New("unreachable network")
 			},
 		},
 	}
