@@ -115,7 +115,7 @@ docker_manifests:
     image_templates:
       - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}-amd64"
       - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}-arm64"
-  - name_template: "ghcr.io/ryanbekhen/nanoproxy:latest{{ end }}"
+  - name_template: "ghcr.io/ryanbekhen/nanoproxy:latest"
     image_templates:
       - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}-amd64"
       - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}-arm64"
