@@ -154,7 +154,7 @@ brews:
     folder: Formula/n
     goarm: 7
     homepage: https://github.com/ryanbekhen/nanoproxy
-    description: "NanoProxy is a simple reverse proxy written in Go."
+    description: "Simple Socks5 Proxy written in Go"
     license: "MIT"
     install: |
       bin.install "nanoproxy"
@@ -164,7 +164,7 @@ winget:
     publisher: ryanbekhen
     license: MIT
     homepage: https://github.com/ryanbekhen/nanoproxy
-    short_description: "NanoProxy is a simple reverse proxy written in Go."
+    short_description: "Simple Socks5 Proxy written in Go"
     tags:
       - Proxy
       - Socks5
@@ -184,7 +184,7 @@ nfpms:
   - id: packages
     file_name_template: "{{ .ConventionalFileName }}"
     homepage: https://github.com/ryanbekhen/nanoproxy
-    description: "NanoProxy is a simple reverse proxy written in Go."
+    description: "Simple Socks5 Proxy written in Go"
     maintainer: "Achmad Irianto Eka Putra <i@ryanbekhen.dev>"
     license: "MIT"
     vendor: ryanbekhen
