@@ -142,8 +142,16 @@ brews:
   - name: nanoproxy
     repository:
       owner: ryanbekhen
-      name: nanoproxy-homebrew-tap
-    folder: Formula
+      name: nanoproxy-homebrew-core
+      branch: "nanoproxy-{{ .Version }}"
+      pull_request:
+        enabled: true
+        draft: true
+        base:
+          owner: Homebrew
+          name: homebrew-core
+          branch: master
+    folder: Formula/n
     goarm: 7
     homepage: https://github.com/ryanbekhen/nanoproxy
     description: "nanoproxy is a simple reverse proxy written in Go."
