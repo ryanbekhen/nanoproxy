@@ -202,9 +202,8 @@ publishers:
   - name: fury.io
     ids:
       - packages
-    env:
-      - "FURY_TOKEN={{ .Env.FURY_TOKEN }}"
-    cmd: ./scripts/fury-upload.sh {{ .ArtifactName }}
+    dir: "{{ dir .ArtifactPath }}"
+    cmd: curl -F package=@{{ .ArtifactName }} https://{{ .Env.FURY_TOKEN }}@push.fury.io/ryanbekhen/
 
 release:
   name_template: "{{ .Version }}"
