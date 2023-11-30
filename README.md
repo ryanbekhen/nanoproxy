@@ -1,7 +1,7 @@
 # NanoProxy
 
 ![coverage](https://raw.githubusercontent.com/ryanbekhen/nanoproxy/badges/.badges/master/coverage.svg)
-[![Go Report Card](https://goreportcard.com/badge/github.com/ryanbekhen/nanoproxy?cache=v1)](https://goreportcard.com/report/github.com/vladopajic/go-test-coverage)
+[![Go Report Card](https://goreportcard.com/badge/github.com/ryanbekhen/nanoproxy?cache=v1)](https://goreportcard.com/report/github.com/ryanbekhen/nanoproxy)
 
 Note: This code includes modifications from the original go-socks5 project (https://github.com/armon/go-socks5)
 Modifications have been made as part of maintenance for NanoProxy.
