@@ -1,42 +1,187 @@
+version: 1
+
 project_name: nanoproxy
+
 dist: dist
+
 before:
   hooks:
     - go mod tidy
 
+snapshot:
+  name_template: '{{ incpatch .Version }}-next'
+
+metadata:
+  mod_timestamp: "{{ .CommitTimestamp }}"
+
 builds:
   - binary: nanoproxy
     ldflags:
-      - -s -w -X github.com/ryanbekhen/nanoproxy.Version={{ .Version }}
+      - -s -w -X nanoproxy.version={{.Version}} -X nanoproxy.commit={{.Commit}} -X nanoproxy.date={{ .CommitDate }} -X nanoproxy.builtBy=goreleaser -X nanoproxy.treeState={{ .IsGitDirty }}
     env:
       - CGO_ENABLED=0
     goos:
       - linux
       - darwin
       - windows
+    goarch:
+      - "386"
+      - amd64
+      - arm
+      - arm64
+      - ppc64
+    goarm:
+      - "7"
+    ignore:
+      - goos: windows
+        goarch: arm
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    flags:
+      - -trimpath
+
+universal_binaries:
+  - replace: false
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  use: github
+  sort: asc
+  groups:
+    - title: Dependency updates
+      regexp: '^.*?(feat|fix)\(deps\)!?:.+$'
+      order: 300
+    - title: "New Features"
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 100
+    - title: "Security updates"
+      regexp: '^.*?sec(\([[:word:]]+\))??!?:.+$'
+      order: 150
+    - title: "Bug fixes"
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 200
+    - title: "Documentation updates"
+      regexp: ^.*?doc(\([[:word:]]+\))??!?:.+$
+      order: 400
+    - title: "Build process updates"
+      regexp: ^.*?build(\([[:word:]]+\))??!?:.+$
+      order: 400
+    - title: Other work
+      order: 9999
+  filters:
+    exclude:
+      - "^test:"
+      - "^chore"
+      - "merge conflict"
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+      - go mod tidy
 
 dockers:
   - image_templates:
-      - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}"
-      - "ghcr.io/ryanbekhen/nanoproxy:latest"
+      - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}-amd64"
     dockerfile: Dockerfile
     build_flag_templates:
-      - --label=org.opencontainers.image.title={{ .ProjectName }}
-      - --label=org.opencontainers.image.description={{ .ProjectName }}
-      - --label=org.opencontainers.image.url=https://github.com/ryanbekhen/nanoproxy
-      - --label=org.opencontainers.image.source=https://github.com/ryanbekhen/nanoproxy
-      - --label=org.opencontainers.image.version={{ .Version }}
-      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
-      - --label=org.opencontainers.image.revision={{ .FullCommit }}
-      - --label=org.opencontainers.image.licenses=Apache-2.0
+      - "--label=io.artifacthub.package.readme-url=https://raw.githubusercontent.com/ryanbekhen/nanoproxy/main/README.md"
+      - '--label=io.artifacthub.package.maintainers=[{"name":"Achmad Irianto Eka Putra","email":"i@ryanbekhen.dev"}]'
+      - "--label=io.artifacthub.package.license=MIT"
+      - "--label=org.opencontainers.image.description=Nanoproxy is a simple proxy written in Go."
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.name={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/amd64"
+  - image_templates:
+      - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}-arm64"
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--label=io.artifacthub.package.readme-url=https://raw.githubusercontent.com/ryanbekhen/nanoproxy/main/README.md"
+      - '--label=io.artifacthub.package.maintainers=[{"name":"Achmad Irianto Eka Putra","email":"i@ryanbekhen.dev"}]'
+      - "--label=io.artifacthub.package.license=MIT"
+      - "--label=org.opencontainers.image.description=Nanoproxy is a simple proxy written in Go."
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.name={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/arm64"
+    goarch: arm64
+
+docker_manifests:
+  - name_template: "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}-amd64"
+      - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/ryanbekhen/nanoproxy:latest{{ end }}"
+    image_templates:
+      - "ghcr.io/ryanbekhen/nanoproxy:v{{ .Version }}-amd64"
+      - "ghcr.io/ryanbekhen/nanoproxy:v{{ .Version }}-arm64"
+
+archives:
+  - name_template: >-
+      {{- .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end -}}
+    format_overrides:
+      - goos: windows
+        format: zip
+    builds_info:
+      group: root
+      owner: root
+    files:
+      - README.md
+      - LICENSE
+
+brews:
+  - name: nanoproxy
+    repository:
+      owner: ryanbekhen
+      name: nanoproxy-homebrew-tap
+    folder: Formula
+    goarm: 7
+    homepage: https://github.com/ryanbekhen/nanoproxy
+    description: "nanoproxy is a simple reverse proxy written in Go."
+    license: "MIT"
+    install: |
+      bin.install "nanoproxy"
+
+winget:
+  - name: nanoproxy
+    publisher: ryanbekhen
+    license: MIT
+    homepage: https://github.com/ryanbekhen/nanoproxy
+    short_description: "nanoproxy is a simple reverse proxy written in Go."
+    tags:
+      - Proxy
+      - Socks5
+    repository:
+      owner: ryanbekhen
+      name: nanoproxy-winget-pkgs
+      branch: "nanoproxy-{{ .Version }}"
+      pull_request:
+        enabled: true
+        draft: true
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master
 
 nfpms:
-  - file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+  - id: packages
+    file_name_template: "{{ .ConventionalFileName }}"
     homepage: https://github.com/ryanbekhen/nanoproxy
     description: "nanoproxy is a simple reverse proxy written in Go."
     maintainer: "Achmad Irianto Eka Putra <i@ryanbekhen.dev>"
     license: "MIT"
     vendor: ryanbekhen
+    bindir: /usr/bin
+    section: utils
     contents:
       - src: systemd/nanoproxy.service
         dst: /etc/systemd/system/nanoproxy.service
@@ -48,82 +193,18 @@ nfpms:
       - apk
       - deb
       - rpm
-
-brews:
-  - name: nanoproxy
-    homepage: https://github.com/ryanbekhen/nanoproxy
-    description: "nanoproxy is a simple reverse proxy written in Go."
-    license: "MIT"
-    folder: Formula
-    install: |
-      bin.install "nanoproxy"
-    repository:
-      owner: ryanbekhen
-      name: nanoproxy
-      branch: master
-
-winget:
-  - name: nanoproxy
-    package_identifier: ryanbekhen.nanoproxy
-    publisher: ryanbekhen
-    description: "nanoproxy is a simple reverse proxy written in Go."
-    short_description: "nanoproxy is a simple reverse proxy written in Go."
-    publisher_url: https://ryanbekhen.dev
-    publisher_support_url: https://ryanbekhen.dev
-    license: MIT
-    license_url: https://github.com/ryanbekhen/nanoproxy/blob/master/LICENSE
-    homepage: https://github.com/ryanbekhen/nanoproxy
-    author: ryanbekhen
-    release_notes: "{{.Changelog}}"
-    copyright: ryanbekhen
-    copyright_url: https://github.com/ryanbekhen/nanoproxy/blob/master/LICENSE
-    tags:
-      - Proxy
-      - Socks5
-    repository:
-      owner: ryanbekhen
-      name: nanoproxy
-      branch: master
-
-release:
-  draft: false
+    deb:
+      lintian_overrides:
+        - statically-linked-binary
+        - changelog-file-missing-in-native-package
 
 publishers:
   - name: fury.io
-    dir: "{{ dir .ArtifactPath }}"
-    cmd: curl -F package=@{{ .ArtifactName }} https://{{ .Env.FURY_TOKEN }}@push.fury.io/ryanbekhen/
+    ids:
+      - packages
+    env:
+      - "FURY_TOKEN={{ .Env.FURY_TOKEN }}"
+    cmd: ./scripts/fury-upload.sh {{ .ArtifactName }}
 
-archives:
-  - name_template: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
-    wrap_in_directory: true
-    format_overrides:
-      - goos: windows
-        format: zip
-
-checksum:
-  name_template: 'checksums.txt'
-
-snapshot:
-  name_template: '{{ incpatch .Version }}-next'
-
-changelog:
-  use: git
-  sort: asc
-  groups:
-    - title: ':rocket: Features'
-      regexp: "^.*feat[(\\w)]*:+.*$"
-      order: 0
-    - title: ':bug: Fixes'
-      regexp: "^.*fix[(\\w)]*:+.*$"
-      order: 1
-    - title: ':hammer_and_wrench: Enhancements'
-      regexp: "^.*chore[(\\w)]*:+.*$"
-      order: 2
-    - title: ':gear: Others'
-      order: 999
-  filters:
-    exclude:
-      - '^docs:'
-      - '^test:'
-      - Merge pull request
-      - Merge branch
+release:
+  name_template: "{{ .Version }}"
