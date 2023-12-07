@@ -4,9 +4,14 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 )
+
+type AddressRewriter interface {
+	Rewrite(request *Request) *AddrSpec
+}
 
 // AddrSpec is a SOCKS5 address specification
 type AddrSpec struct {
@@ -27,6 +32,15 @@ func (a *AddrSpec) String() string {
 	return fmt.Sprintf("%s:%d", a.IP, a.Port)
 }
 
+// Address returns a string suitable to dial; prefer returning IP-based
+// address, fallback to FQDN
+func (a *AddrSpec) Address() string {
+	if 0 != len(a.IP) {
+		return net.JoinHostPort(a.IP.String(), strconv.Itoa(a.Port))
+	}
+	return net.JoinHostPort(a.FQDN, strconv.Itoa(a.Port))
+}
+
 // Request is a SOCKS5 request message
 type Request struct {
 	Version     uint8
@@ -34,6 +48,7 @@ type Request struct {
 	AuthContext *AuthContext
 	RemoteAddr  *AddrSpec
 	DestAddr    *AddrSpec
+	realAddr    *AddrSpec
 	BufferConn  io.Reader
 	Latency     time.Duration
 }
@@ -64,45 +79,52 @@ func NewRequest(bufferConn io.Reader) (*Request, error) {
 }
 
 func readAddressSpec(r io.Reader) (*AddrSpec, error) {
+	d := &AddrSpec{}
+
 	addrType := []byte{0}
-	if _, err := io.ReadAtLeast(r, addrType, 1); err != nil {
+	if _, err := r.Read(addrType); err != nil {
 		return nil, err
 	}
 
-	var addr AddrSpec
+	// Handle on a per-type basis
 	switch AddrType(addrType[0]) {
 	case AddressTypeIPv4:
-		addr.IP = make(net.IP, net.IPv4len)
-		if _, err := io.ReadAtLeast(r, addr.IP, net.IPv4len); err != nil {
+		addr := make([]byte, 4)
+		if _, err := io.ReadAtLeast(r, addr, len(addr)); err != nil {
 			return nil, err
 		}
-	case AddressTypeIPv6:
-		addr.IP = make(net.IP, net.IPv6len)
-		if _, err := io.ReadAtLeast(r, addr.IP, net.IPv6len); err != nil {
-			return nil, err
-		}
-	case AddressTypeDomain:
-		domainLen := []byte{0}
-		if _, err := io.ReadAtLeast(r, domainLen, 1); err != nil {
-			return nil, err
-		}
+		d.IP = addr
 
-		domain := make([]byte, domainLen[0])
-		if _, err := io.ReadAtLeast(r, domain, int(domainLen[0])); err != nil {
+	case AddressTypeIPv6:
+		addr := make([]byte, 16)
+		if _, err := io.ReadAtLeast(r, addr, len(addr)); err != nil {
 			return nil, err
 		}
-		addr.FQDN = string(domain)
+		d.IP = addr
+
+	case AddressTypeDomain:
+		if _, err := r.Read(addrType); err != nil {
+			return nil, err
+		}
+		addrLen := int(addrType[0])
+		fqdn := make([]byte, addrLen)
+		if _, err := io.ReadAtLeast(r, fqdn, addrLen); err != nil {
+			return nil, err
+		}
+		d.FQDN = string(fqdn)
+
 	default:
 		return nil, fmt.Errorf("unrecognized address type: %d", addrType[0])
 	}
 
+	// Read the port
 	port := []byte{0, 0}
 	if _, err := io.ReadAtLeast(r, port, 2); err != nil {
 		return nil, err
 	}
-	addr.Port = int(port[0])<<8 | int(port[1])
+	d.Port = (int(port[0]) << 8) | int(port[1])
 
-	return &addr, nil
+	return d, nil
 }
 
 func sendReply(conn io.Writer, reply uint8, addr *AddrSpec) error {

@@ -20,6 +20,7 @@ type Config struct {
 	Dial              func(network, addr string) (net.Conn, error)
 	AfterRequest      func(req *Request, conn net.Conn)
 	Resolver          Resolver
+	Rewriter          AddressRewriter
 }
 
 type Server struct {
@@ -197,6 +198,11 @@ func (s *Server) handleRequest(req *Request, conn net.Conn) error {
 		dest.IP = addr
 	}
 
+	req.realAddr = req.DestAddr
+	if s.config.Rewriter != nil {
+		req.realAddr = s.config.Rewriter.Rewrite(req)
+	}
+
 	switch req.Command {
 	case CommandConnect:
 		return s.handleConnect(conn, req)
@@ -222,7 +228,7 @@ func (s *Server) handleConnect(conn net.Conn, req *Request) error {
 	}
 
 	processStartTimestamp := time.Now()
-	dest, err := dial("tcp", req.DestAddr.String())
+	dest, err := dial("tcp", req.realAddr.Address())
 	req.Latency = time.Since(processStartTimestamp)
 
 	if err != nil {

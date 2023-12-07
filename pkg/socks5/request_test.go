@@ -48,8 +48,8 @@ func (m *MockConn) SetWriteDeadline(t time.Time) error {
 }
 
 func Test_AddrSpec_String(t *testing.T) {
-	var a AddrSpec
-	a = AddrSpec{
+	var a *AddrSpec
+	a = &AddrSpec{
 		FQDN: "www.google.com",
 		IP:   net.ParseIP("192.168.1.1"),
 		Port: 8080,
@@ -57,7 +57,7 @@ func Test_AddrSpec_String(t *testing.T) {
 
 	assert.Equal(t, "www.google.com (192.168.1.1):8080", a.String())
 
-	a = AddrSpec{
+	a = &AddrSpec{
 		FQDN: "",
 		IP:   net.ParseIP("192.168.1.1"),
 		Port: 8080,

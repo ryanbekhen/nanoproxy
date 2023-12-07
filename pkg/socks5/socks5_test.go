@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"io"
 	"net"
@@ -257,7 +258,12 @@ func TestRequest_Unreachable(t *testing.T) {
 			Dial: func(network, addr string) (net.Conn, error) {
 				// timeout
 				timeout := time.Duration(1) * time.Millisecond
-				return net.DialTimeout(network, addr, timeout)
+				conn, err := net.DialTimeout(network, addr, timeout)
+				if err != nil {
+					// Handle error here. For example, return an error or print a log.
+					return nil, fmt.Errorf("failed to dial: %w", err)
+				}
+				return conn, nil
 			},
 		},
 	}
@@ -279,6 +285,7 @@ func TestRequest_Unreachable(t *testing.T) {
 	req, err := NewRequest(buf)
 	assert.NoError(t, err)
 
+	req.realAddr = req.DestAddr
 	err = s.handleConnect(resp, req)
 	assert.Error(t, err)
 
@@ -317,6 +324,7 @@ func TestRequest_Refused(t *testing.T) {
 	req, err := NewRequest(buf)
 	assert.NoError(t, err)
 
+	req.realAddr = req.DestAddr
 	err = s.handleConnect(resp, req)
 	assert.Error(t, err)
 
@@ -359,6 +367,7 @@ func TestRequest_NetworkUnreachable(t *testing.T) {
 	req, err := NewRequest(buf)
 	assert.NoError(t, err)
 
+	req.realAddr = req.DestAddr
 	err = s.handleConnect(resp, req)
 	assert.Error(t, err)
 
