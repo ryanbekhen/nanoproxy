@@ -47,7 +47,7 @@ func TestListenAndServe(t *testing.T) {
 	lAddr := l.Addr().(*net.TCPAddr)
 
 	credentials := StaticCredentialStore{
-		"foo": "bar",
+		"foo": "$2y$05$Xr4Vj6wbsCuf70.Fif2guuX8Ez97GB0VysyCTRL2EMkIikCpY/ugi", // foo:bar
 	}
 	auth := &UserPassAuthenticator{Credentials: credentials}
 	conf := &Config{
