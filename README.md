@@ -129,7 +129,24 @@ NETWORK=tcp
 TZ=Asia/Jakarta
 CLIENT_TIMEOUT=10s
 DNS_TIMEOUT=10s
+CREDENTIALS=username:passwordHash
 ```
+
+For the creation of the password hash, you can use the `htpasswd -nB username` command, but you need to install the
+`apache2-utils` package first. To install the package, run the following command:
+
+```shell
+sudo apt install apache2-utils
+```
+
+Then, you can use the `htpasswd` command to generate the password hash:
+
+```shell
+htpasswd -nB username
+```
+
+This will prompt you to enter the password. After entering the password, the command will output the username and the
+password hash. You can then use the output to set the `CREDENTIALS` environment variable.
 
 The following table lists the available configuration options:
 
@@ -140,6 +157,7 @@ The following table lists the available configuration options:
 | TZ             | The timezone to use.                                  | `Local`       |
 | CLIENT_TIMEOUT | The timeout for connecting to the destination server. | `10s`         |
 | DNS_TIMEOUT    | The timeout for DNS resolution.                       | `10s`         |
+| CREDENTIALS    | The credentials to use for authentication.            | `""`          |
 
 ## Logging
 

@@ -1,5 +1,9 @@
 package socks5
 
+import (
+	"golang.org/x/crypto/bcrypt"
+)
+
 type CredentialStore interface {
 	Valid(user, password string) bool
 }
@@ -11,5 +15,7 @@ func (s StaticCredentialStore) Valid(user, password string) bool {
 	if !ok {
 		return false
 	}
-	return password == pass
+
+	err := bcrypt.CompareHashAndPassword([]byte(pass), []byte(password))
+	return err == nil
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/ryanbekhen/nanoproxy/pkg/config"
 	"github.com/ryanbekhen/nanoproxy/pkg/socks5"
 	"os"
+	"strings"
 	"time"
 
 	_ "time/tzdata"
@@ -26,11 +27,22 @@ func main() {
 
 	socks5Config := socks5.Config{
 		Logger:            &logger,
-		Resolver:          &socks5.DNSResolver{},
-		ClientConnTimeout: cfg.ClientTimeout,
 		DestConnTimeout:   cfg.DestTimeout,
+		ClientConnTimeout: cfg.ClientTimeout,
+		Resolver:          &socks5.DNSResolver{},
 	}
 
+	credentials := socks5.StaticCredentialStore{}
+	for _, cred := range cfg.Credentials {
+		credArr := strings.Split(cred, ":")
+		if len(credArr) != 2 {
+			logger.Fatal().Msgf("Invalid credential: %s", cred)
+		}
+		credentials[credArr[0]] = credArr[1]
+	}
+	if len(credentials) > 0 {
+		socks5Config.Credentials = credentials
+	}
 	sock5Server := socks5.New(&socks5Config)
 
 	logger.Info().Msgf("Starting socks5 server on %s://%s", cfg.Network, cfg.ADDR)
