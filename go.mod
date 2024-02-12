@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	github.com/caarlos0/env/v10 v10.0.0
-	github.com/rs/zerolog v1.31.0
+	github.com/rs/zerolog v1.32.0
 	github.com/stretchr/testify v1.8.4
 	golang.org/x/crypto v0.19.0
 )
