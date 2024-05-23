@@ -124,6 +124,8 @@ dockers:
       - "--label=org.opencontainers.image.version={{.Version}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/amd64"
+    extra_files:
+      - script.sh
   - image_templates:
       - "ghcr.io/ryanbekhen/nanoproxy-warp:{{ .Version }}-arm64"
     dockerfile: Dockerfile-warp
