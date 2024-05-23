@@ -139,7 +139,6 @@ docker_manifests:
   - name_template: "ghcr.io/ryanbekhen/nanoproxy-warp:{{ .Version }}"
     image_templates:
       - "ghcr.io/ryanbekhen/nanoproxy-warp:{{ .Version }}-amd64"
-      - "ghcr.io/ryanbekhen/nanoproxy-warp:{{ .Version }}-arm64"
   - name_template: "ghcr.io/ryanbekhen/nanoproxy-warp:latest"
     image_templates:
       - "ghcr.io/ryanbekhen/nanoproxy-warp:{{ .Version }}-amd64"
