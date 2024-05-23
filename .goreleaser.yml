@@ -112,7 +112,7 @@ dockers:
 
   - image_templates:
       - "ghcr.io/ryanbekhen/nanoproxy-warp:{{ .Version }}-amd64"
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile-warp
     build_flag_templates:
       - "--label=io.artifacthub.package.readme-url=https://raw.githubusercontent.com/ryanbekhen/nanoproxy/main/README.md"
       - '--label=io.artifacthub.package.maintainers=[{"name":"Achmad Irianto Eka Putra","email":"i@ryanbekhen.dev"}]'
@@ -126,7 +126,7 @@ dockers:
       - "--platform=linux/amd64"
   - image_templates:
       - "ghcr.io/ryanbekhen/nanoproxy-warp:{{ .Version }}-arm64"
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile-warp
     build_flag_templates:
       - "--label=io.artifacthub.package.readme-url=https://raw.githubusercontent.com/ryanbekhen/nanoproxy/main/README.md"
       - '--label=io.artifacthub.package.maintainers=[{"name":"Achmad Irianto Eka Putra","email":"i@ryanbekhen.dev"}]'
