@@ -126,23 +126,6 @@ dockers:
       - "--platform=linux/amd64"
     extra_files:
       - script.sh
-  - image_templates:
-      - "ghcr.io/ryanbekhen/nanoproxy-warp:{{ .Version }}-arm64"
-    dockerfile: Dockerfile-warp
-    build_flag_templates:
-      - "--label=io.artifacthub.package.readme-url=https://raw.githubusercontent.com/ryanbekhen/nanoproxy/main/README.md"
-      - '--label=io.artifacthub.package.maintainers=[{"name":"Achmad Irianto Eka Putra","email":"i@ryanbekhen.dev"}]'
-      - "--label=io.artifacthub.package.license=MIT"
-      - "--label=org.opencontainers.image.description=Nanoproxy is a simple proxy written in Go."
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.name={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--label=org.opencontainers.image.source={{.GitURL}}"
-      - "--platform=linux/arm64"
-    goarch: arm64
-    extra_files:
-      - script.sh
 
 docker_manifests:
   - name_template: "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}"
@@ -160,7 +143,6 @@ docker_manifests:
   - name_template: "ghcr.io/ryanbekhen/nanoproxy-warp:latest"
     image_templates:
       - "ghcr.io/ryanbekhen/nanoproxy-warp:{{ .Version }}-amd64"
-      - "ghcr.io/ryanbekhen/nanoproxy-warp:{{ .Version }}-arm64"
 
 archives:
   - name_template: >-
