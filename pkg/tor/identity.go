@@ -23,10 +23,10 @@ func waitForTorBootstrap(logger *zerolog.Logger, timeout time.Duration) error {
 
 	select {
 	case <-complete:
-		logger.Info().Msg("Tor bootstrap selesai 100%")
+		logger.Info().Msg("Tor bootstrap done")
 		return nil
 	case <-time.After(timeout):
-		return fmt.Errorf("timeout: Tor bootstrap tidak selesai dalam waktu %v", timeout)
+		return fmt.Errorf("timeout: Tor bootstrap not complete after %s", timeout)
 	}
 }
 
