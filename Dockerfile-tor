@@ -4,6 +4,7 @@ RUN apk update && \
     apk add --no-cache tor
 
 COPY nanoproxy /usr/bin/nanoproxy
+COPY start-with-tor.sh /usr/bin/start-with-tor.sh
 
 RUN mkdir -p /etc/tor && \
     echo -e "ControlPort 9051\nCookieAuthentication 1\nDataDirectory /var/lib/tor" > /etc/tor/torrc
@@ -14,4 +15,4 @@ EXPOSE 1080
 
 USER tor
 
-ENTRYPOINT ["/bin/sh", "-c", "/usr/bin/tor & /usr/bin/nanoproxy"]
+ENTRYPOINT ["/bin/sh", "-c", "/usr/bin/entrypoint.sh"]
