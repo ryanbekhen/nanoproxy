@@ -8,7 +8,7 @@ COPY entrypoint.sh /usr/bin/entrypoint.sh
 RUN chmod +x /usr/bin/entrypoint.sh
 
 RUN mkdir -p /etc/tor && \
-    echo -e "ControlPort 9051\nCookieAuthentication 1\nDataDirectory /var/lib/tor" > /etc/tor/torrc
+    echo -e "ControlPort 9051\nCookieAuthentication 0" > /etc/tor/torrc
 
 RUN mkdir -p /var/lib/tor
 
