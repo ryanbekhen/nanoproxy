@@ -13,9 +13,9 @@ func waitForTorBootstrap(logger *zerolog.Logger, timeout time.Duration) error {
 
 	go func() {
 		for {
-			if checkTorBootstrapStatus() {
+			if requestNewTorIdentity(nil) == nil {
 				complete <- true
-				return
+				break
 			}
 			time.Sleep(5 * time.Second)
 		}
@@ -28,34 +28,6 @@ func waitForTorBootstrap(logger *zerolog.Logger, timeout time.Duration) error {
 	case <-time.After(timeout):
 		return fmt.Errorf("timeout: Tor bootstrap not complete after %s", timeout)
 	}
-}
-
-func checkTorBootstrapStatus() bool {
-	conn, err := net.Dial("tcp", "127.0.0.1:9051")
-	if err != nil {
-		fmt.Println("Error connecting to Tor control port:", err)
-		return false
-	}
-	defer conn.Close()
-
-	_, err = conn.Write([]byte("GETINFO status/bootstrap-phase\r\n"))
-	if err != nil {
-		fmt.Println("Error sending command:", err)
-		return false
-	}
-
-	buffer := make([]byte, 2048)
-	_, err = conn.Read(buffer)
-	if err != nil {
-		fmt.Println("Error reading from Tor control port:", err)
-		return false
-	}
-
-	if string(buffer) == "250-status/bootstrap-phase=NOTICE BOOTSTRAP PROGRESS=100\r\n" {
-		return true
-	}
-
-	return false
 }
 
 func SwitcherIdentity(logger *zerolog.Logger, switchInterval time.Duration) {
@@ -93,7 +65,9 @@ func requestNewTorIdentity(logger *zerolog.Logger) error {
 		return fmt.Errorf("failed to switch tor identity: %w", err)
 	}
 
-	logger.Info().Msg("Tor identity changed")
+	if logger != nil {
+		logger.Info().Msg("Tor identity changed")
+	}
 
 	return nil
 }
