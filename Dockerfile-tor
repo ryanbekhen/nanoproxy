@@ -15,6 +15,4 @@ RUN mkdir -p /var/lib/tor
 
 EXPOSE 1080
 
-USER tor
-
 ENTRYPOINT ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
