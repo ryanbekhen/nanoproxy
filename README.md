@@ -24,14 +24,16 @@ sends the response back to the user. This allows the proxy server to intercept a
 
 Here's how the data flows through the proxy:
 
-```text
-      Network          Proxy            Destination Server
-    .---------.     .---------.       .-----------------.
---> |         | --> |         | ----> |                 |
-    | Request |     | Forward | <---- |  Process &      |
-<-- |         | <-- | Request |       |  Respond        |
-    `---------'     `---------'       |                 |
-                                      `-----------------'
+```mermaid
+sequenceDiagram
+  participant Network
+  participant Proxy
+  participant DestinationServer
+
+  Network->>Proxy: Request
+  Proxy->>DestinationServer: Forward Request
+  DestinationServer->>Proxy: Process & Respond
+  Proxy->>Network: Respond
 ```
 
 This clear separation of responsibilities helps optimize network communication and enables various proxy-related
