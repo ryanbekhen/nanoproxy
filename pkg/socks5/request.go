@@ -140,16 +140,25 @@ func sendReply(conn io.Writer, reply uint8, addr *AddrSpec) error {
 	case addr.FQDN != "":
 		addrType = AddressTypeDomain.Uint8()
 		addrBody = append([]byte{byte(len(addr.FQDN))}, addr.FQDN...)
+		if addr.Port < 0 || addr.Port > 65535 {
+			return fmt.Errorf("port value out of range uint16: %d", addr.Port)
+		}
 		addrPort = uint16(addr.Port)
 
 	case addr.IP.To4() != nil:
 		addrType = AddressTypeIPv4.Uint8()
 		addrBody = addr.IP.To4()
+		if addr.Port < 0 || addr.Port > 65535 {
+			return fmt.Errorf("port value out of range uint16: %d", addr.Port)
+		}
 		addrPort = uint16(addr.Port)
 
 	case addr.IP.To16() != nil:
 		addrType = AddressTypeIPv6.Uint8()
 		addrBody = addr.IP.To16()
+		if addr.Port < 0 || addr.Port > 65535 {
+			return fmt.Errorf("port value out of range uint16: %d", addr.Port)
+		}
 		addrPort = uint16(addr.Port)
 
 	default:
