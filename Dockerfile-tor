@@ -1,0 +1,18 @@
+FROM alpine:3.21
+
+RUN apk update && \
+    apk add --no-cache tor
+
+COPY nanoproxy /usr/bin/nanoproxy
+
+RUN mkdir -p /etc/tor && \
+    echo -e "ControlPort 9051\nCookieAuthentication 1\nDataDirectory /var/lib/tor" > /etc/tor/torrc
+
+RUN mkdir -p /var/lib/tor && \
+    chown -R tor /var/lib/tor
+
+RUN systemctl enable tor
+
+EXPOSE 1080
+
+CMD ["/usr/bin/nanoproxy"]

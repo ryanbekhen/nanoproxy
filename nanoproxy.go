@@ -5,6 +5,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/ryanbekhen/nanoproxy/pkg/config"
 	"github.com/ryanbekhen/nanoproxy/pkg/socks5"
+	"github.com/ryanbekhen/nanoproxy/pkg/tor"
 	"os"
 	"strings"
 	"time"
@@ -43,6 +44,14 @@ func main() {
 	if len(credentials) > 0 {
 		socks5Config.Credentials = credentials
 	}
+
+	if cfg.TorEnabled {
+		socks5Config.Dial = tor.Dial
+		logger.Info().Msg("Tor mode enabled")
+
+		go tor.SwitcherIdentity(&logger, cfg.TorIdentityInterval)
+	}
+
 	sock5Server := socks5.New(&socks5Config)
 
 	logger.Info().Msgf("Starting socks5 server on %s://%s", cfg.Network, cfg.ADDR)
