@@ -17,7 +17,12 @@ metadata:
 builds:
   - binary: nanoproxy
     ldflags:
-      - -s -w -X nanoproxy.version={{.Version}} -X nanoproxy.commit={{.Commit}} -X nanoproxy.date={{ .CommitDate }} -X nanoproxy.builtBy=goreleaser -X nanoproxy.treeState={{ .IsGitDirty }}
+      - -s -w
+      - -X nanoproxy.version={{.Version}}
+      - -X nanoproxy.commit={{.Commit}}
+      - -X nanoproxy.date={{ .CommitDate }}
+      - -X nanoproxy.builtBy=goreleaser
+      - -X nanoproxy.treeState={{ .IsGitDirty }}
     env:
       - CGO_ENABLED=0
     goos:
@@ -25,11 +30,8 @@ builds:
       - darwin
       - windows
     goarch:
-      - "386"
       - amd64
-      - arm
       - arm64
-      - ppc64
     goarm:
       - "7"
     ignore:
@@ -49,7 +51,7 @@ changelog:
   use: github
   sort: asc
   groups:
-    - title: Dependency updates
+    - title: "Dependency updates"
       regexp: '^.*?(feat|fix)\(deps\)!?:.+$'
       order: 300
     - title: "New Features"
@@ -62,12 +64,12 @@ changelog:
       regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
       order: 200
     - title: "Documentation updates"
-      regexp: ^.*?doc(\([[:word:]]+\))??!?:.+$
+      regexp: '^.*?doc(\([[:word:]]+\))??!?:.+$'
       order: 400
     - title: "Build process updates"
-      regexp: ^.*?build(\([[:word:]]+\))??!?:.+$
+      regexp: '^.*?build(\([[:word:]]+\))??!?:.+$'
       order: 400
-    - title: Other work
+    - title: "Other work"
       order: 9999
   filters:
     exclude:
