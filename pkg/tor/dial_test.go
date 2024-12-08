@@ -44,3 +44,29 @@ func TestDefaultDialer_Dial_Failure(t *testing.T) {
 	assert.NotNil(t, err, "expected an error during dial failure simulation")
 	assert.Nil(t, conn, "expected no connection on dial failure")
 }
+
+func TestDefaultDialer_DialControlPort(t *testing.T) {
+	tests := []struct {
+		name    string
+		address string
+		wantErr bool
+	}{
+		{"successful connection", "localhost:9051", false},
+		{"failed connection", "invalid:address", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dialer := DefaultDialer{}
+			conn, err := dialer.DialControlPort("tcp", tt.address)
+
+			if tt.wantErr {
+				assert.NotNil(t, err, "expected an error for: %s", tt.name)
+				assert.Nil(t, conn, "expected no connection for: %s", tt.name)
+			} else {
+				assert.Nil(t, err, "expected no error for: %s", tt.name)
+				assert.NotNil(t, conn, "expected a valid connection for: %s", tt.name)
+			}
+		})
+	}
+}

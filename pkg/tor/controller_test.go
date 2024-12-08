@@ -48,6 +48,13 @@ func (md *MockDialer) Dial(network, address string) (net.Conn, error) {
 	return &MockConn{responses: []string{"250 OK\r\n", "250 OK\r\n"}}, nil
 }
 
+func (md *MockDialer) DialControlPort(network, address string) (net.Conn, error) {
+	if md.shouldFail {
+		return nil, fmt.Errorf("failed to connect to tor control port")
+	}
+	return &MockConn{responses: []string{"250 OK\r\n", "250 OK\r\n"}}, nil
+}
+
 func TestRequestNewTorIdentity_Success(t *testing.T) {
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: &bytes.Buffer{}}).With().Logger()
 	dialer := &MockDialer{shouldFail: false}

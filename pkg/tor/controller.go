@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"github.com/rs/zerolog"
+	"strings"
 )
 
 type Controller struct {
@@ -15,24 +16,20 @@ func NewTorController(dialer Dialer) *Controller {
 }
 
 func (t *Controller) RequestNewTorIdentity(logger *zerolog.Logger) error {
-	conn, err := t.dialer.Dial("tcp", "127.0.0.1:9051")
+	conn, err := t.dialer.DialControlPort("tcp", "127.0.0.1:9051")
 	if err != nil {
 		return fmt.Errorf("failed to connect to tor control port: %w", err)
 	}
 	defer conn.Close()
 
-	_, _ = fmt.Fprintf(conn, "AUTHENTICATE\r\n")
-	_, _ = fmt.Fprintf(conn, "SIGNAL NEWNYM\r\n")
-
-	authStatus, err := bufio.NewReader(conn).ReadString('\n')
-	if err != nil || authStatus != "250 OK\r\n" {
-		return fmt.Errorf("failed to authenticate with tor control port: %w", err)
+	_, _ = fmt.Fprintf(conn, "AUTHENTICATE \"\"\r\n")
+	_, err = fmt.Fprintf(conn, "SIGNAL NEWNYM\r\n")
+	if err != nil {
+		return fmt.Errorf("failed to request new identity: %w", err)
 	}
-
-	_, _ = fmt.Fprintf(conn, "SIGNAL NEWNYM\r\n")
-	status, err := bufio.NewReader(conn).ReadString('\n')
-	if err != nil || status != "250 OK\r\n" {
-		return fmt.Errorf("failed to switch tor identity: %w", err)
+	signalResponse, _ := bufio.NewReader(conn).ReadString('\n')
+	if !strings.HasPrefix(signalResponse, "250") {
+		return fmt.Errorf("failed to switch tor identity: %v", signalResponse)
 	}
 
 	if logger != nil {
