@@ -52,7 +52,7 @@ func TestDefaultDialer_DialControlPort(t *testing.T) {
 	defer func() { customSOCKS5 = originalSOCKS5 }() // Restore after test
 
 	serverMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "OK")
+		_, _ = fmt.Fprintln(w, "OK")
 	}))
 	defer serverMock.Close()
 
