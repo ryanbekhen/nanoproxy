@@ -46,10 +46,18 @@ func main() {
 	}
 
 	if cfg.TorEnabled {
-		socks5Config.Dial = tor.Dial
+		torDialer := &tor.DefaultDialer{}
+		socks5Config.Dial = torDialer.Dial
 		logger.Info().Msg("Tor mode enabled")
 
-		go tor.SwitcherIdentity(&logger, cfg.TorIdentityInterval)
+		torController := tor.NewTorController(torDialer)
+		ch := make(chan bool)
+		go tor.SwitcherIdentity(&logger, torController, cfg.TorIdentityInterval, ch)
+
+		go func() {
+			<-ch
+			logger.Fatal().Msg("Tor identity switcher stopped")
+		}()
 	}
 
 	sock5Server := socks5.New(&socks5Config)
