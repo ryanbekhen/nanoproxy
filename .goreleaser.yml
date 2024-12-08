@@ -113,8 +113,8 @@ dockers:
     goarch: arm64
 
   - image_templates:
-      - "ghcr.io/ryanbekhen/nanoproxy-warp:{{ .Version }}-amd64"
-    dockerfile: Dockerfile-warp
+      - "ghcr.io/ryanbekhen/nanoproxy-tor:{{ .Version }}-amd64"
+    dockerfile: Dockerfile-tor
     build_flag_templates:
       - "--label=io.artifacthub.package.readme-url=https://raw.githubusercontent.com/ryanbekhen/nanoproxy/main/README.md"
       - '--label=io.artifacthub.package.maintainers=[{"name":"Achmad Irianto Eka Putra","email":"i@ryanbekhen.dev"}]'
@@ -127,7 +127,7 @@ dockers:
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/amd64"
     extra_files:
-      - script.sh
+      - supervisord.conf
 
 docker_manifests:
   - name_template: "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}"
@@ -138,12 +138,12 @@ docker_manifests:
     image_templates:
       - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}-amd64"
       - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}-arm64"
-  - name_template: "ghcr.io/ryanbekhen/nanoproxy-warp:{{ .Version }}"
+  - name_template: "ghcr.io/ryanbekhen/nanoproxy-tor:{{ .Version }}"
     image_templates:
-      - "ghcr.io/ryanbekhen/nanoproxy-warp:{{ .Version }}-amd64"
-  - name_template: "ghcr.io/ryanbekhen/nanoproxy-warp:latest"
+      - "ghcr.io/ryanbekhen/nanoproxy-tor:{{ .Version }}-amd64"
+  - name_template: "ghcr.io/ryanbekhen/nanoproxy-tor:latest"
     image_templates:
-      - "ghcr.io/ryanbekhen/nanoproxy-warp:{{ .Version }}-amd64"
+      - "ghcr.io/ryanbekhen/nanoproxy-tor:{{ .Version }}-amd64"
 
 archives:
   - name_template: >-

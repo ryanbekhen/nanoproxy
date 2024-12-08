@@ -1,0 +1,18 @@
+FROM alpine:3.21
+
+RUN apk update && \
+    apk add --no-cache tor supervisor
+
+RUN mkdir -p /var/log/supervisor
+
+COPY nanoproxy /usr/bin/nanoproxy
+COPY supervisord.conf /etc/supervisord.conf
+
+RUN mkdir -p /etc/tor && \
+    echo -e "ControlPort 9051\nCookieAuthentication 0" > /etc/tor/torrc
+
+RUN mkdir -p /var/lib/tor
+
+EXPOSE 1080
+
+ENTRYPOINT ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]

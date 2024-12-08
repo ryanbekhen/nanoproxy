@@ -26,14 +26,13 @@ Here's how the data flows through the proxy:
 
 ```mermaid
 sequenceDiagram
-  participant Network
-  participant Proxy
-  participant DestinationServer
-
-  Network->>Proxy: Request
-  Proxy->>DestinationServer: Forward Request
-  DestinationServer->>Proxy: Process & Respond
-  Proxy->>Network: Respond
+    participant Network
+    participant Proxy
+    participant DestinationServer
+    Network ->> Proxy: Request
+    Proxy ->> DestinationServer: Forward Request
+    DestinationServer ->> Proxy: Process & Respond
+    Proxy ->> Network: Respond
 ```
 
 This clear separation of responsibilities helps optimize network communication and enables various proxy-related
@@ -45,7 +44,7 @@ NanoProxy provides the following features:
 
 - **SOCKS5 proxy server.** NanoProxy is a SOCKS5 proxy server that can be used to proxy network traffic for various
   applications.
-- **WARP Cloudflare support.** NanoProxy supports running behind Cloudflare's WARP service (Docker only).
+- **TOR support.** NanoProxy can be run with Tor support to provide anonymized network traffic (Docker only).
 
 ## Installation
 
@@ -124,7 +123,7 @@ docker run -p 1080:1080 ghcr.io/ryanbekhen/nanoproxy:latest
 You can also run NanoProxy behind Cloudflare's WARP service using Docker. To do so, you can use the following command:
 
 ```shell
-docker run --rm -d --privileged --cap-add=NET_ADMIN --sysctl net.ipv6.conf.all.disable_ipv6=0 --sysctl net.ipv4.conf.all.src_valid_mark=1 -p 1080:1080 ghcr.io/ryanbekhen/nanoproxy-warp:latest
+docker run --rm -d --privileged --cap-add=NET_ADMIN --sysctl net.ipv6.conf.all.disable_ipv6=0 --sysctl net.ipv4.conf.all.src_valid_mark=1 -p 1080:1080 ghcr.io/ryanbekhen/nanoproxy-tor:latest
 ```
 
 ## Configuration
@@ -159,14 +158,16 @@ password hash. You can then use the output to set the `CREDENTIALS` environment 
 
 The following table lists the available configuration options:
 
-| Name           | Description                                           | Default Value |
-|----------------|-------------------------------------------------------|---------------|
-| ADDR           | The address to listen on.                             | `:1080`       |
-| NETWORK        | The network to listen on. (tcp, tcp4, tcp6)           | `tcp`         |
-| TZ             | The timezone to use.                                  | `Local`       |
-| CLIENT_TIMEOUT | The timeout for connecting to the destination server. | `10s`         |
-| DNS_TIMEOUT    | The timeout for DNS resolution.                       | `10s`         |
-| CREDENTIALS    | The credentials to use for authentication.            | `""`          |
+| Name                  | Description                                                     | Default Value |
+|-----------------------|-----------------------------------------------------------------|---------------|
+| ADDR                  | The address to listen on.                                       | `:1080`       |
+| NETWORK               | The network to listen on. (tcp, tcp4, tcp6)                     | `tcp`         |
+| TZ                    | The timezone to use.                                            | `Local`       |
+| CLIENT_TIMEOUT        | The timeout for connecting to the destination server.           | `10s`         |
+| DNS_TIMEOUT           | The timeout for DNS resolution.                                 | `10s`         |
+| CREDENTIALS           | The credentials to use for authentication.                      | `""`          |
+| TOR_ENABLED           | Enable Tor support. (works only on Docker)                      | `false`       |
+| TOR_IDENTITY_INTERVAL | The interval to change the Tor identity. (works only on Docker) | `10m`         |ß
 
 ## Logging
 
