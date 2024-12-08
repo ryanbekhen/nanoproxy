@@ -137,6 +137,23 @@ sudo yum update
 sudo yum install nanoproxy
 ```
 
+### MacOS
+
+You can install NanoProxy using Homebrew:
+
+```shell
+brew tap ryanbekhen/nanoproxy
+brew install nanoproxy
+```
+
+### Windows
+
+You can download using winget:
+
+```shell
+winget install nanoproxy
+```
+
 ## Usage
 
 After installing NanoProxy using the provided packages (.deb or .rpm) or accessing it through the repository,
