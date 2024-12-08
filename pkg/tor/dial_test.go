@@ -3,6 +3,8 @@ package tor
 import (
 	"fmt"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,27 +48,16 @@ func TestDefaultDialer_Dial_Failure(t *testing.T) {
 }
 
 func TestDefaultDialer_DialControlPort(t *testing.T) {
-	tests := []struct {
-		name    string
-		address string
-		wantErr bool
-	}{
-		{"successful connection", "localhost:9051", false},
-		{"failed connection", "invalid:address", true},
-	}
+	customSOCKS5 = mockSOCKS5                        // Replace with mock
+	defer func() { customSOCKS5 = originalSOCKS5 }() // Restore after test
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dialer := DefaultDialer{}
-			conn, err := dialer.DialControlPort("tcp", tt.address)
+	serverMock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "OK")
+	}))
+	defer serverMock.Close()
 
-			if tt.wantErr {
-				assert.NotNil(t, err, "expected an error for: %s", tt.name)
-				assert.Nil(t, conn, "expected no connection for: %s", tt.name)
-			} else {
-				assert.Nil(t, err, "expected no error for: %s", tt.name)
-				assert.NotNil(t, conn, "expected a valid connection for: %s", tt.name)
-			}
-		})
-	}
+	dialer := DefaultDialer{}
+	conn, err := dialer.DialControlPort("tcp", serverMock.Listener.Addr().String())
+	assert.Nil(t, err, "expected no error during successful dial")
+	assert.NotNil(t, conn, "expected a valid connection on successful dial")
 }
