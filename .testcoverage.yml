@@ -7,3 +7,4 @@ threshold:
 exclude:
   paths:
     - \.pb\.go$    # excludes all protobuf generated files
+    - nanoproxy\.go$    # excludes the main package
