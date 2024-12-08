@@ -1,4 +1,4 @@
-version: 1
+version: 2
 
 project_name: nanoproxy
 
@@ -168,7 +168,7 @@ brews:
     repository:
       owner: ryanbekhen
       name: homebrew-nanoproxy
-    folder: Formula
+    directory: Formula
     goarm: 7
     homepage: https://github.com/ryanbekhen/nanoproxy
     description: "Simple Socks5 Proxy written in Go"
