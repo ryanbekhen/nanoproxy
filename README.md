@@ -38,13 +38,64 @@ sequenceDiagram
 This clear separation of responsibilities helps optimize network communication and enables various proxy-related
 functionalities.
 
+## Data Flow Through Proxy with Tor Support
+
+NanoProxy with Tor adds an extra layer of anonymity and privacy to network traffic by using the Tor network. This
+enhanced version manages your requests through Tor's decentralized network of nodes, providing better privacy
+protection.
+
+Here's how the data flows through the proxy when using Tor support:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant NanoProxy
+    participant TorNetwork
+    participant DestinationServer
+    User ->> NanoProxy: Request
+    NanoProxy ->> TorNetwork: Forward Request through Tor
+    TorNetwork ->> DestinationServer: Request via Exit Node
+    DestinationServer ->> TorNetwork: Process & Respond
+    TorNetwork ->> NanoProxy: Response via Entry Node
+    NanoProxy ->> User: Respond
+```
+
+### Features of NanoProxy with Tor:
+
+- **Enhanced Anonymity**: Traffic is routed through multiple Tor nodes, making it difficult to trace the origin of the
+  request.
+- **Automatic IP Rotation**: Changes exit nodes periodically for better anonymity and privacy.
+- **Secure Data Transmission**: Encryption between Tor nodes protects data from snooping.
+
+This distinct data flow employing the Tor network ensures that users enjoy increased privacy without compromising on the
+flexible functionality of the proxy server.
+
+### Impact of Using NanoProxy with Tor:
+
+- **High Latency**: Since the traffic must pass through multiple nodes within the Tor network, this can result in
+  increased latency. This means that the time it takes for requests to reach their destination and for responses to
+  return to the user may be longer compared to direct or non-Tor proxy connections.
+- **Lower Bandwidth Speeds**: The Tor network generally has lower bandwidth speeds compared to direct paths, which can
+  affect the performance of large data transfers.
+- **Connection Stability Limitations**: Due to dynamic routing through various nodes, users might experience more
+  frequent connection instability.
+
+Understanding these impacts allows users to make informed decisions about when and how to use NanoProxy with Tor,
+especially if anonymity is prioritized over connection speed or stability.
+
 ## Features
 
 NanoProxy provides the following features:
 
-- **SOCKS5 proxy server.** NanoProxy is a SOCKS5 proxy server that can be used to proxy network traffic for various
+- [x] **SOCKS5 proxy server.** NanoProxy is a SOCKS5 proxy server that can be used to proxy network traffic for various
   applications.
-- **TOR support.** NanoProxy can be run with Tor support to provide anonymized network traffic (Docker only).
+- [x] **TOR support.** NanoProxy can be run with Tor support to provide anonymized network traffic (Docker only).
+- [x] **IP Rotation with Tor.** NanoProxy allows for IP rotation using the Tor network, providing enhanced anonymity and
+  privacy by periodically changing exit nodes.
+- [ ] **Authentication Management from Dashboard.** Easily manage user authentication settings and credentials via a
+  comprehensive and user-friendly web dashboard, ensuring secure access to proxy features.
+- [ ] **Change IP via API.** Programmatically request IP changes through a robust API, facilitating automated and
+  dynamic IP management for different use cases.
 
 ## Installation
 
