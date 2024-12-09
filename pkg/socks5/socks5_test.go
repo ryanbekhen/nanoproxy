@@ -403,8 +403,8 @@ func TestRequest_CommandNotSupported(t *testing.T) {
 	buf.Write(port)
 
 	resp := &MockConn{}
-	req, err := NewRequest(buf)
-	err = s.handleRequest(req, resp)
+	req, _ := NewRequest(buf)
+	err := s.handleRequest(req, resp)
 	assert.Error(t, err)
 
 	out := resp.buf.Bytes()

@@ -84,7 +84,7 @@ func Test_NewRequest(t *testing.T) {
 			assert.Fail(t, "expected ping, got %s", string(buf))
 		}
 
-		_, err = conn.Write([]byte("pong"))
+		_, _ = conn.Write([]byte("pong"))
 	}()
 	lAddr := l.Addr().(*net.TCPAddr)
 	s := &Server{
