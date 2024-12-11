@@ -2,6 +2,7 @@ package socks5
 
 import (
 	"fmt"
+	"github.com/ryanbekhen/nanoproxy/pkg/credential"
 	"io"
 )
 
@@ -34,8 +35,8 @@ var (
 	ErrAuthFailure = fmt.Errorf("authentication failure")
 )
 
-// AuthContext encapsulates authentication state provided during negotiation
-type AuthContext struct {
+// Context encapsulates authentication state provided during negotiation
+type Context struct {
 	// Method is the provided auth method
 	Method AuthType
 	// Payload provided during negotiation.
@@ -46,7 +47,7 @@ type AuthContext struct {
 
 // Authenticator is the interface implemented by types that can handle authentication
 type Authenticator interface {
-	Authenticate(reader io.Reader, writer io.Writer) (*AuthContext, error)
+	Authenticate(reader io.Reader, writer io.Writer) (*Context, error)
 	GetCode() AuthType
 }
 
@@ -59,14 +60,14 @@ func (a *NoAuthAuthenticator) GetCode() AuthType {
 }
 
 // Authenticate handles the authentication process
-func (a *NoAuthAuthenticator) Authenticate(_ io.Reader, writer io.Writer) (*AuthContext, error) {
+func (a *NoAuthAuthenticator) Authenticate(_ io.Reader, writer io.Writer) (*Context, error) {
 	_, err := writer.Write([]byte{Version, uint8(NoAuth)})
-	return &AuthContext{NoAuth, nil}, err
+	return &Context{NoAuth, nil}, err
 }
 
 // UserPassAuthenticator is used to handle username/password-based authentication
 type UserPassAuthenticator struct {
-	Credentials CredentialStore
+	Credentials credential.Store
 }
 
 // GetCode returns the code of the authenticator
@@ -75,7 +76,7 @@ func (a *UserPassAuthenticator) GetCode() AuthType {
 }
 
 // Authenticate handles the authentication process
-func (a *UserPassAuthenticator) Authenticate(reader io.Reader, writer io.Writer) (*AuthContext, error) {
+func (a *UserPassAuthenticator) Authenticate(reader io.Reader, writer io.Writer) (*Context, error) {
 	if _, err := writer.Write([]byte{Version, uint8(UserPassAuth)}); err != nil {
 		return nil, err
 	}
@@ -122,7 +123,7 @@ func (a *UserPassAuthenticator) Authenticate(reader io.Reader, writer io.Writer)
 		return nil, fmt.Errorf("invalid credentials")
 	}
 
-	return &AuthContext{UserPassAuth, map[string]string{"Username": string(user)}}, nil
+	return &Context{UserPassAuth, map[string]string{"Username": string(user)}}, nil
 }
 
 func readMethods(bufConn io.Reader) ([]byte, error) {

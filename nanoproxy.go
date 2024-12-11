@@ -6,8 +6,13 @@ import (
 	"github.com/caarlos0/env/v10"
 	"github.com/rs/zerolog"
 	"github.com/ryanbekhen/nanoproxy/pkg/config"
+	"github.com/ryanbekhen/nanoproxy/pkg/credential"
+	"github.com/ryanbekhen/nanoproxy/pkg/httpproxy"
+	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
 	"github.com/ryanbekhen/nanoproxy/pkg/socks5"
 	"github.com/ryanbekhen/nanoproxy/pkg/tor"
+	"net"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -28,28 +33,40 @@ func main() {
 		time.Local = loc
 	}
 
-	socks5Config := socks5.Config{
-		Logger:            &logger,
-		DestConnTimeout:   cfg.DestTimeout,
-		ClientConnTimeout: cfg.ClientTimeout,
-		Resolver:          &socks5.DNSResolver{},
-	}
-
-	credentials := socks5.StaticCredentialStore{}
+	credentials := credential.StaticCredentialStore{}
 	for _, cred := range cfg.Credentials {
 		credArr := strings.Split(cred, ":")
 		if len(credArr) != 2 {
 			logger.Fatal().Msgf("Invalid credential: %s", cred)
 		}
+
 		credentials[credArr[0]] = credArr[1]
 	}
-	if len(credentials) > 0 {
-		socks5Config.Credentials = credentials
+
+	dnsResolver := &resolver.DNSResolver{}
+
+	httpConfig := httpproxy.Config{
+		Credentials:       credentials,
+		Logger:            &logger,
+		DestConnTimeout:   cfg.DestTimeout,
+		ClientConnTimeout: cfg.ClientTimeout,
+		Dial:              net.Dial,
+		Resolver:          dnsResolver,
+	}
+
+	httpServer := httpproxy.New(&httpConfig)
+
+	socks5Config := socks5.Config{
+		Logger:            &logger,
+		DestConnTimeout:   cfg.DestTimeout,
+		ClientConnTimeout: cfg.ClientTimeout,
+		Resolver:          dnsResolver,
 	}
 
 	if cfg.TorEnabled {
 		torDialer := &tor.DefaultDialer{}
 		socks5Config.Dial = torDialer.Dial
+		httpConfig.Dial = torDialer.Dial
 		logger.Info().Msg("Tor mode enabled")
 
 		torController := tor.NewTorController(torDialer)
@@ -62,10 +79,28 @@ func main() {
 		}()
 	}
 
+	if len(credentials) > 0 {
+		authenticator := &socks5.UserPassAuthenticator{
+			Credentials: credentials,
+		}
+		socks5Config.Authentication = append(socks5Config.Authentication, authenticator)
+	}
+
 	sock5Server := socks5.New(&socks5Config)
 
-	logger.Info().Msgf("Starting socks5 server on %s://%s", cfg.Network, cfg.ADDR)
-	if err := sock5Server.ListenAndServe(cfg.Network, cfg.ADDR); err != nil {
-		logger.Fatal().Msg(err.Error())
-	}
+	go func() {
+		logger.Info().Msgf("Starting HTTP proxy server on %s://%s", cfg.Network, cfg.ADDRHttp)
+		if err := http.ListenAndServe(cfg.ADDRHttp, httpServer); err != nil {
+			logger.Fatal().Msg(err.Error())
+		}
+	}()
+
+	go func() {
+		logger.Info().Msgf("Starting socks5 server on %s://%s", cfg.Network, cfg.ADDR)
+		if err := sock5Server.ListenAndServe(cfg.Network, cfg.ADDR); err != nil {
+			logger.Fatal().Msg(err.Error())
+		}
+	}()
+
+	select {}
 }

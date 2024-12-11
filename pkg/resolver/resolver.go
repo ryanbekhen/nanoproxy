@@ -1,4 +1,4 @@
-package socks5
+package resolver
 
 import (
 	"net"

@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/ryanbekhen/nanoproxy/pkg/credential"
+	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
 	"github.com/stretchr/testify/assert"
 	"io"
 	"net"
@@ -16,7 +18,7 @@ func TestNew(t *testing.T) {
 	conf := &Config{
 		Authentication: []Authenticator{&NoAuthAuthenticator{}},
 		Logger:         nil,
-		Resolver:       &DNSResolver{},
+		Resolver:       &resolver.DNSResolver{},
 	}
 
 	server := New(conf)
@@ -46,12 +48,12 @@ func TestListenAndServe(t *testing.T) {
 	}()
 	lAddr := l.Addr().(*net.TCPAddr)
 
-	credentials := StaticCredentialStore{
+	credentials := credential.StaticCredentialStore{
 		"foo": "$2y$05$Xr4Vj6wbsCuf70.Fif2guuX8Ez97GB0VysyCTRL2EMkIikCpY/ugi", // foo:bar
 	}
 	auth := &UserPassAuthenticator{Credentials: credentials}
 	conf := &Config{
-		Authentication: []Authenticator{auth},
+		Authentication: []auth.Authenticator{auth},
 	}
 	server := New(conf)
 	assert.NotNil(t, server)
@@ -67,7 +69,7 @@ func TestListenAndServe(t *testing.T) {
 
 	req := bytes.NewBuffer(nil)
 	req.Write([]byte{5})
-	req.Write([]byte{2, NoAuth.Uint8(), UserPassAuth.Uint8()})
+	req.Write([]byte{2, auth.NoAuth.Uint8(), auth.UserPassAuth.Uint8()})
 	req.Write([]byte{1, 3, 'f', 'o', 'o', 3, 'b', 'a', 'r'})
 	req.Write([]byte{5, 1, 0, 1, 127, 0, 0, 1})
 
@@ -80,8 +82,8 @@ func TestListenAndServe(t *testing.T) {
 	conn.Write(req.Bytes())
 
 	expected := []byte{
-		Version, UserPassAuth.Uint8(),
-		1, AuthSuccess.Uint8(),
+		Version, auth.UserPassAuth.Uint8(),
+		1, auth.AuthSuccess.Uint8(),
 		5,
 		0,
 		0,
@@ -110,12 +112,12 @@ func TestListenAndServe_InvalidCredentials(t *testing.T) {
 
 	lAddr := l.Addr().(*net.TCPAddr)
 
-	credentials := StaticCredentialStore{
+	credentials := credential.StaticCredentialStore{
 		"foo": "bar",
 	}
 	auth := &UserPassAuthenticator{Credentials: credentials}
 	conf := &Config{
-		Authentication: []Authenticator{auth},
+		Authentication: []auth.Authenticator{auth},
 	}
 	server := New(conf)
 	assert.NotNil(t, server)
@@ -131,7 +133,7 @@ func TestListenAndServe_InvalidCredentials(t *testing.T) {
 
 	req := bytes.NewBuffer(nil)
 	req.Write([]byte{5})
-	req.Write([]byte{2, NoAuth.Uint8(), UserPassAuth.Uint8()})
+	req.Write([]byte{2, auth.NoAuth.Uint8(), auth.UserPassAuth.Uint8()})
 	req.Write([]byte{1, 3, 'b', 'a', 'd', 3, 'p', 'a', 's', 's'}) // invalid username and password
 	req.Write([]byte{5, 1, 0, 1, 127, 0, 0, 1})
 
@@ -144,8 +146,8 @@ func TestListenAndServe_InvalidCredentials(t *testing.T) {
 	conn.Write(req.Bytes())
 
 	expected := []byte{
-		Version, UserPassAuth.Uint8(),
-		1, AuthFailure.Uint8(), // expect authentication failure
+		Version, auth.UserPassAuth.Uint8(),
+		1, auth.AuthFailure.Uint8(), // expect authentication failure
 	}
 	out := make([]byte, len(expected))
 
@@ -162,13 +164,13 @@ func TestListenAndServe_InvalidAuthType(t *testing.T) {
 	assert.NoError(t, err)
 	lAddr := l.Addr().(*net.TCPAddr)
 
-	credentials := StaticCredentialStore{
+	credentials := credential.StaticCredentialStore{
 		"foo": "bar",
 	}
 
 	auth := &UserPassAuthenticator{Credentials: credentials}
 	conf := &Config{
-		Authentication: []Authenticator{auth},
+		Authentication: []auth.Authenticator{auth},
 	}
 
 	server := New(conf)
@@ -188,7 +190,7 @@ func TestListenAndServe_InvalidAuthType(t *testing.T) {
 	req.Write([]byte{5})
 
 	// invalid auth type
-	req.Write([]byte{2, NoAuth.Uint8(), 0})
+	req.Write([]byte{2, auth.NoAuth.Uint8(), 0})
 	req.Write([]byte{1, 3, 'f', 'o', 'o', 3, 'b', 'a', 'r'})
 	req.Write([]byte{5, 1, 0, 1, 127, 0, 0, 1})
 
@@ -201,7 +203,7 @@ func TestListenAndServe_InvalidAuthType(t *testing.T) {
 	conn.Write(req.Bytes())
 
 	expected := []byte{
-		Version, NoAcceptable.Uint8(),
+		Version, auth.NoAcceptable.Uint8(),
 	}
 
 	out := make([]byte, len(expected))

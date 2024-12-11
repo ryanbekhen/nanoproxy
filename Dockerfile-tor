@@ -14,5 +14,6 @@ RUN mkdir -p /etc/tor && \
 RUN mkdir -p /var/lib/tor
 
 EXPOSE 1080
+EXPOSE 8080
 
 ENTRYPOINT ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]

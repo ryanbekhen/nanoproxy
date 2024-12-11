@@ -1,10 +1,10 @@
-package socks5
+package credential
 
 import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-type CredentialStore interface {
+type Store interface {
 	Valid(user, password string) bool
 }
 
