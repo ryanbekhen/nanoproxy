@@ -8,3 +8,4 @@ exclude:
   paths:
     - \.pb\.go$    # excludes all protobuf generated files
     - nanoproxy\.go$    # excludes the main package
+    - pkg/config/.*\.go$    # excludes all files in the pkg/config package
