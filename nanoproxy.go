@@ -1,5 +1,3 @@
-//go:build !test
-
 package main
 
 import (
@@ -90,13 +88,22 @@ func main() {
 
 	go func() {
 		logger.Info().Msgf("Starting HTTP proxy server on %s://%s", cfg.Network, cfg.ADDRHttp)
-		if err := http.ListenAndServe(cfg.ADDRHttp, httpServer); err != nil {
+
+		server := &http.Server{
+			Addr:         cfg.ADDRHttp,
+			Handler:      httpServer,
+			ReadTimeout:  15 * time.Second,
+			WriteTimeout: 15 * time.Second,
+			IdleTimeout:  60 * time.Second,
+		}
+
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatal().Msg(err.Error())
 		}
 	}()
 
 	go func() {
-		logger.Info().Msgf("Starting socks5 server on %s://%s", cfg.Network, cfg.ADDR)
+		logger.Info().Msgf("Starting SOCKS5 server on %s://%s", cfg.Network, cfg.ADDR)
 		if err := sock5Server.ListenAndServe(cfg.Network, cfg.ADDR); err != nil {
 			logger.Fatal().Msg(err.Error())
 		}
