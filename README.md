@@ -7,8 +7,9 @@ Note: This code includes modifications from the original go-socks5 project (http
 Modifications have been made as part of maintenance for NanoProxy.
 This version is licensed under the MIT license.
 
-NanoProxy is a lightweight SOCKS5 proxy server written in Go. It is designed to be simple, minimalistic, and easy to
-use.
+NanoProxy is a lightweight proxy server written in Go. It supports both **SOCKS5** and **HTTP Proxy** protocols, making
+it flexible for proxying various types of network traffic. NanoProxy is designed to be simple, minimalistic, and easy to
+use. It can be run as a standalone service or as a Docker container.
 
 > ⚠️ **Notice:** NanoProxy is currently in pre-production stage. While it provides essential proxying capabilities,
 > please be aware that it is still under active development. Full backward compatibility is not guaranteed until
@@ -17,10 +18,10 @@ use.
 
 ## Data Flow Through Proxy
 
-NanoProxy acts as a proxy server that forwards network traffic between the user and the destination server.
-When a user makes a request, the request is sent to the proxy server. The proxy server then forwards the request to
-the destination server. The destination server processes the request and responds back to the proxy server, which then
-sends the response back to the user. This allows the proxy server to intercept and manage network traffic effectively.
+NanoProxy acts as a proxy Server that forwards network traffic between the user and the destination Server.
+When a user makes a request, the request is sent to the proxy Server. The proxy Server then forwards the request to
+the destination Server. The destination Server processes the request and responds back to the proxy Server, which then
+sends the response back to the user. This allows the proxy Server to intercept and manage network traffic effectively.
 
 Here's how the data flows through the proxy:
 
@@ -60,6 +61,27 @@ sequenceDiagram
     NanoProxy ->> User: Respond
 ```
 
+## Data Flow Through Proxy with HTTP Support
+
+NanoProxy supports HTTP proxying by handling HTTP requests and forwarding them to the destination server. Depending on
+the request method (e.g., GET, POST, CONNECT), NanoProxy processes and forwards the request accordingly.
+
+Here's how the data flows through the proxy when using HTTP support:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant NanoProxy
+    participant DestinationServer
+    User ->> NanoProxy: HTTP Request
+    NanoProxy ->> DestinationServer: Forward HTTP Request
+    DestinationServer ->> NanoProxy: Process & Respond
+    NanoProxy ->> User: Deliver Response
+```
+
+This process allows NanoProxy to act as an intermediary between the client and the destination server for HTTP traffic,
+ensuring flexibility and traffic management.
+
 ### Features of NanoProxy with Tor:
 
 - **Enhanced Anonymity**: Traffic is routed through multiple Tor nodes, making it difficult to trace the origin of the
@@ -68,7 +90,7 @@ sequenceDiagram
 - **Secure Data Transmission**: Encryption between Tor nodes protects data from snooping.
 
 This distinct data flow employing the Tor network ensures that users enjoy increased privacy without compromising on the
-flexible functionality of the proxy server.
+flexible functionality of the proxy Server.
 
 ### Impact of Using NanoProxy with Tor:
 
@@ -87,8 +109,9 @@ especially if anonymity is prioritized over connection speed or stability.
 
 NanoProxy provides the following features:
 
-- [x] **SOCKS5 proxy server.** NanoProxy is a SOCKS5 proxy server that can be used to proxy network traffic for various
+- [x] **SOCKS5 proxy Server.** NanoProxy is a SOCKS5 proxy Server that can be used to proxy network traffic for various
   applications.
+- [x] **HTTP proxy Server.** NanoProxy can now act as an HTTP proxy Server for forwarding HTTP requests.
 - [x] **TOR support.** NanoProxy can be run with Tor support to provide anonymized network traffic (Docker only).
 - [x] **IP Rotation with Tor.** NanoProxy allows for IP rotation using the Tor network, providing enhanced anonymity and
   privacy by periodically changing exit nodes.
@@ -185,13 +208,13 @@ nanoproxy
 You can also run NanoProxy using Docker. To do so, you can use the following command:
 
 ```shell
-docker run -p 1080:1080 ghcr.io/ryanbekhen/nanoproxy:latest
+docker run -p 1080:1080 -p 8080:8080 ghcr.io/ryanbekhen/nanoproxy:latest
 ```
 
 You can also run NanoProxy behind Tor using the following command:
 
 ```shell
-docker run --rm -e TOR_ENABLED=true -d --privileged --cap-add=NET_ADMIN --sysctl net.ipv6.conf.all.disable_ipv6=0 --sysctl net.ipv4.conf.all.src_valid_mark=1 -p 1080:1080 ghcr.io/ryanbekhen/nanoproxy-tor:latest
+docker run --rm -e TOR_ENABLED=true -d --privileged --cap-add=NET_ADMIN --sysctl net.ipv6.conf.all.disable_ipv6=0 --sysctl net.ipv4.conf.all.src_valid_mark=1 -p 1080:1080 -p 8080:8080 ghcr.io/ryanbekhen/nanoproxy-tor:latest
 ```
 
 ## Configuration
@@ -201,6 +224,7 @@ desired values:
 
 ```text
 ADDR=:1080
+ADDR_HTTP=:8080
 NETWORK=tcp
 TZ=Asia/Jakarta
 CLIENT_TIMEOUT=10s
@@ -229,17 +253,24 @@ The following table lists the available configuration options:
 | Name                  | Description                                                     | Default Value |
 |-----------------------|-----------------------------------------------------------------|---------------|
 | ADDR                  | The address to listen on.                                       | `:1080`       |
+| ADDR_HTTP             | The address to listen on for HTTP requests.                     | `:8080`       |
 | NETWORK               | The network to listen on. (tcp, tcp4, tcp6)                     | `tcp`         |
 | TZ                    | The timezone to use.                                            | `Local`       |
-| CLIENT_TIMEOUT        | The timeout for connecting to the destination server.           | `10s`         |
+| CLIENT_TIMEOUT        | The timeout for connecting to the destination Server.           | `10s`         |
 | DNS_TIMEOUT           | The timeout for DNS resolution.                                 | `10s`         |
 | CREDENTIALS           | The credentials to use for authentication.                      | `""`          |
 | TOR_ENABLED           | Enable Tor support. (works only on Docker)                      | `false`       |
-| TOR_IDENTITY_INTERVAL | The interval to change the Tor identity. (works only on Docker) | `10m`         |ß
+| TOR_IDENTITY_INTERVAL | The interval to change the Tor identity. (works only on Docker) | `10m`         |
+
+- **ADDR_HTTP**: By default, NanoProxy listens for HTTP proxy traffic on `:8080`. You can set this address to any host:
+  port combination for custom setups.
+- **CREDENTIALS**: When enabled, both SOCKS5 and HTTP Proxy requests are authenticated using the credentials provided in
+  this field. This supports `username:password` pairs.
 
 ## Logging
 
-NanoProxy logs all requests and responses to the standard output. You can use the `journalctl` command to view the logs:
+NanoProxy logs all requests and responses to standard output, including SOCKS5 and HTTP Proxy traffic. To view logs for
+HTTP Proxy requests, use the `journalctl` command:
 
 ```shell
 journalctl -u nanoproxy
@@ -250,15 +281,43 @@ journalctl -u nanoproxy
 To test the proxy using cURL, you can use the `-x` flag followed by the proxy URL. For example, to fetch the Google
 homepage using the proxy running on `localhost:8080`, use the following command:
 
+### SOCKS5 Proxy
+
 ```shell
 curl -x socks5://localhost:1080 https://google.com
 ```
 
-Replace localhost:8080 with the actual address and port where your NanoProxy instance is running. This command instructs
-cURL to use the specified proxy for the request, allowing you to see the request and response through the proxy server.
+### HTTP Proxy
 
-Remember that you can adjust the proxy address and port as needed based on your setup. This is a convenient way to
-verify that NanoProxy is correctly intercepting and forwarding the traffic.
+```shell
+curl -x localhost:8080 https://google.com
+```
+
+If credentials are enabled for HTTP Proxy, use the `-U` flag to supply the username and password:
+
+```shell
+curl -x http://localhost:8080 -U username:password https://example.com
+```
+
+In both cases, replace `localhost:8080` with the actual address and port where your NanoProxy instance is running.
+
+## Authentication for HTTP Proxy
+
+If authentication is enabled (via the `CREDENTIALS` configuration), the HTTP Proxy requires clients to include the
+`Proxy-Authorization` header in their requests. The header must use the following format:
+
+```http
+Proxy-Authorization: Basic <base64_encoded("username:password")>
+```
+
+For example, to use the HTTP Proxy with curl and provide authentication, run:
+
+```shell
+curl -x http://localhost:8080 -U username:password https://example.com
+```
+
+If authentication fails or is not provided, the proxy will return `407 Proxy Authentication Required` along with the
+appropriate `Proxy-Authenticate` header.
 
 ## Contributions
 

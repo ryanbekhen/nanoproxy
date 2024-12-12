@@ -1,4 +1,4 @@
-package socks5
+package credential
 
 import (
 	"github.com/stretchr/testify/assert"
@@ -6,8 +6,7 @@ import (
 )
 
 func Test_CredentialStore_Valid(t *testing.T) {
-	var s CredentialStore
-	s = StaticCredentialStore{
+	s := StaticCredentialStore{
 		"foo": "$2y$05$Xr4Vj6wbsCuf70.Fif2guuX8Ez97GB0VysyCTRL2EMkIikCpY/ugi",
 	}
 	assert.True(t, s.Valid("foo", "bar"))

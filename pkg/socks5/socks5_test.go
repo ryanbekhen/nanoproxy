@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/ryanbekhen/nanoproxy/pkg/credential"
+	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
 	"github.com/stretchr/testify/assert"
 	"io"
 	"net"
@@ -16,7 +18,7 @@ func TestNew(t *testing.T) {
 	conf := &Config{
 		Authentication: []Authenticator{&NoAuthAuthenticator{}},
 		Logger:         nil,
-		Resolver:       &DNSResolver{},
+		Resolver:       &resolver.DNSResolver{},
 	}
 
 	server := New(conf)
@@ -46,7 +48,7 @@ func TestListenAndServe(t *testing.T) {
 	}()
 	lAddr := l.Addr().(*net.TCPAddr)
 
-	credentials := StaticCredentialStore{
+	credentials := credential.StaticCredentialStore{
 		"foo": "$2y$05$Xr4Vj6wbsCuf70.Fif2guuX8Ez97GB0VysyCTRL2EMkIikCpY/ugi", // foo:bar
 	}
 	auth := &UserPassAuthenticator{Credentials: credentials}
@@ -110,7 +112,7 @@ func TestListenAndServe_InvalidCredentials(t *testing.T) {
 
 	lAddr := l.Addr().(*net.TCPAddr)
 
-	credentials := StaticCredentialStore{
+	credentials := credential.StaticCredentialStore{
 		"foo": "bar",
 	}
 	auth := &UserPassAuthenticator{Credentials: credentials}
@@ -162,7 +164,7 @@ func TestListenAndServe_InvalidAuthType(t *testing.T) {
 	assert.NoError(t, err)
 	lAddr := l.Addr().(*net.TCPAddr)
 
-	credentials := StaticCredentialStore{
+	credentials := credential.StaticCredentialStore{
 		"foo": "bar",
 	}
 

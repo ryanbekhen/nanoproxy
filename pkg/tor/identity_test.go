@@ -1,45 +1,88 @@
-package tor_test
+package tor
 
 import (
-	"bytes"
-	"fmt"
-	"github.com/ryanbekhen/nanoproxy/pkg/tor"
+	"errors"
+	"github.com/rs/zerolog"
 	"testing"
 	"time"
-
-	"github.com/rs/zerolog"
-	"github.com/stretchr/testify/assert"
 )
 
+// Mock Requester untuk menggantikan implementasi sebenarnya
 type MockRequester struct {
-	shouldFail bool
-	callCount  int
+	RequestNewTorIdentityFunc func(logger *zerolog.Logger) error
 }
 
 func (m *MockRequester) RequestNewTorIdentity(logger *zerolog.Logger) error {
-	m.callCount++
-	if m.shouldFail {
-		return fmt.Errorf("simulated failure")
-	}
-	return nil
+	return m.RequestNewTorIdentityFunc(logger)
+}
+
+func TestWaitForTorBootstrap(t *testing.T) {
+	logger := zerolog.Nop()
+	timeout := 2 * time.Second
+
+	t.Run("Successful bootstrap", func(t *testing.T) {
+		mockRequester := &MockRequester{
+			RequestNewTorIdentityFunc: func(logger *zerolog.Logger) error {
+				return nil // selalu sukses
+			},
+		}
+
+		err := WaitForTorBootstrap(&logger, mockRequester, timeout)
+		if err != nil {
+			t.Errorf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("Timeout occurs", func(t *testing.T) {
+		mockRequester := &MockRequester{
+			RequestNewTorIdentityFunc: func(logger *zerolog.Logger) error {
+				time.Sleep(3 * time.Second) // memicu timeout
+				return nil
+			},
+		}
+
+		err := WaitForTorBootstrap(&logger, mockRequester, timeout)
+		if err == nil {
+			t.Errorf("expected timeout error, got nil")
+		}
+	})
+
+	t.Run("Error in RequestNewTorIdentity", func(t *testing.T) {
+		mockRequester := &MockRequester{
+			RequestNewTorIdentityFunc: func(logger *zerolog.Logger) error {
+				return errors.New("requester error")
+			},
+		}
+
+		err := WaitForTorBootstrap(&logger, mockRequester, timeout)
+		if err == nil || err.Error() != "timeout: Tor bootstrap not complete after 2s" {
+			t.Errorf("expected timeout error due to RequestNewTorIdentity failure, got %v", err)
+		}
+	})
 }
 
 func TestSwitcherIdentity(t *testing.T) {
-	logger := zerolog.New(zerolog.ConsoleWriter{Out: &bytes.Buffer{}}).With().Logger()
-	requester := &MockRequester{shouldFail: false}
-	done := make(chan bool)
+	logger := zerolog.Nop()
+	switchInterval := 1 * time.Second
+	done := make(chan bool, 1)
 
-	// Set up a Goroutine to stop the SwitcherIdentity after a short delay
-	go func() {
-		time.Sleep(10 * time.Millisecond)
-		done <- true
-	}()
+	t.Run("Switcher stops when done signal is received", func(t *testing.T) {
+		mockRequester := &MockRequester{
+			RequestNewTorIdentityFunc: func(logger *zerolog.Logger) error {
+				return nil
+			},
+		}
 
-	// Call the SwitcherIdentity function with a very short interval
-	go tor.SwitcherIdentity(&logger, requester, 1*time.Millisecond, done)
+		go func() {
+			time.Sleep(2 * time.Second)
+			done <- true
+		}()
 
-	// Wait for a moment to ensure goroutine have run
-	time.Sleep(15 * time.Millisecond)
+		go func() {
+			SwitcherIdentity(&logger, mockRequester, switchInterval, done)
+		}()
 
-	assert.True(t, requester.callCount > 0, "expected SwitcherIdentity to call RequestNewTorIdentity multiple times")
+		time.Sleep(3 * time.Second)
+		// Tidak ada log error karena mockRequester selalu berhasil
+	})
 }

@@ -3,6 +3,7 @@ package socks5
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
 	"github.com/stretchr/testify/assert"
 	"io"
 	"net"
@@ -89,7 +90,7 @@ func Test_NewRequest(t *testing.T) {
 	lAddr := l.Addr().(*net.TCPAddr)
 	s := &Server{
 		config: &Config{
-			Resolver: &DNSResolver{},
+			Resolver: &resolver.DNSResolver{},
 		},
 	}
 

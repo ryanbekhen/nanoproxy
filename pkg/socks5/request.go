@@ -45,7 +45,7 @@ func (a *AddrSpec) Address() string {
 type Request struct {
 	Version     uint8
 	Command     Command
-	AuthContext *AuthContext
+	AuthContext *Context
 	RemoteAddr  *AddrSpec
 	DestAddr    *AddrSpec
 	realAddr    *AddrSpec

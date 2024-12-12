@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/rs/zerolog"
+	"github.com/ryanbekhen/nanoproxy/pkg/credential"
+	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
 	"net"
 	"os"
 	"strings"
@@ -13,13 +15,13 @@ import (
 
 type Config struct {
 	Authentication    []Authenticator
-	Credentials       CredentialStore
+	Credentials       credential.Store
 	Logger            *zerolog.Logger
 	DestConnTimeout   time.Duration
 	ClientConnTimeout time.Duration
 	Dial              func(network, addr string) (net.Conn, error)
 	AfterRequest      func(req *Request, conn net.Conn)
-	Resolver          Resolver
+	Resolver          resolver.Resolver
 	Rewriter          AddressRewriter
 }
 
@@ -44,7 +46,7 @@ func New(conf *Config) *Server {
 	}
 
 	if conf.Resolver == nil {
-		conf.Resolver = &DNSResolver{}
+		conf.Resolver = &resolver.DNSResolver{}
 	}
 
 	if conf.DestConnTimeout == 0 {
@@ -129,7 +131,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	// Authenticate
 	authContext, err := s.authenticate(conn, connectionBuffer)
 	if err != nil {
-		s.config.Logger.Err(err).Msg("failed to authenticate")
+		s.config.Logger.Err(err).Msg("SOCKS5 authentication failed")
 		return
 	}
 
@@ -159,7 +161,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 			Str("client_addr", conn.RemoteAddr().String()).
 			Str("dest_addr", request.DestAddr.String()).
 			Str("latency", request.Latency.String()).
-			Msg("request completed")
+			Msg("SOCKS5 request completed")
 	}
 
 	if s.config.AfterRequest != nil {
@@ -167,7 +169,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 }
 
-func (s *Server) authenticate(conn net.Conn, bufConn *bufio.Reader) (*AuthContext, error) {
+func (s *Server) authenticate(conn net.Conn, bufConn *bufio.Reader) (*Context, error) {
 	// Get the methods
 	methods, err := readMethods(bufConn)
 	if err != nil {
@@ -176,8 +178,8 @@ func (s *Server) authenticate(conn net.Conn, bufConn *bufio.Reader) (*AuthContex
 
 	// Select a usable method
 	for _, method := range methods {
-		if auth, ok := s.authentication[AuthType(method)]; ok {
-			return auth.Authenticate(bufConn, conn)
+		if a, ok := s.authentication[AuthType(method)]; ok {
+			return a.Authenticate(bufConn, conn)
 		}
 	}
 
