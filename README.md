@@ -208,13 +208,13 @@ nanoproxy
 You can also run NanoProxy using Docker. To do so, you can use the following command:
 
 ```shell
-docker run -p 1080:1080 ghcr.io/ryanbekhen/nanoproxy:latest
+docker run -p 1080:1080 -p 8080:8080 ghcr.io/ryanbekhen/nanoproxy:latest
 ```
 
 You can also run NanoProxy behind Tor using the following command:
 
 ```shell
-docker run --rm -e TOR_ENABLED=true -d --privileged --cap-add=NET_ADMIN --sysctl net.ipv6.conf.all.disable_ipv6=0 --sysctl net.ipv4.conf.all.src_valid_mark=1 -p 1080:1080 ghcr.io/ryanbekhen/nanoproxy-tor:latest
+docker run --rm -e TOR_ENABLED=true -d --privileged --cap-add=NET_ADMIN --sysctl net.ipv6.conf.all.disable_ipv6=0 --sysctl net.ipv4.conf.all.src_valid_mark=1 -p 1080:1080 -p 8080:8080 ghcr.io/ryanbekhen/nanoproxy-tor:latest
 ```
 
 ## Configuration
