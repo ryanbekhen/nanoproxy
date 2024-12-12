@@ -119,7 +119,7 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 			Str("dest_addr", r.Host).
 			Str("latency", fmt.Sprintf("%dms", latency)).
 			Msg("CONNECT failed")
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	defer serverConn.Close()
@@ -129,7 +129,7 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 		s.config.Logger.Error().
 			Str("client_addr", r.RemoteAddr).
 			Msg("Failed to hijack client connection")
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	defer clientConn.Close()
@@ -157,6 +157,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Proxy authentication required or unauthorized", http.StatusProxyAuthRequired)
 		return
 	}
+
 	startTime := time.Now()
 	clientIP := r.RemoteAddr
 
@@ -178,8 +179,8 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 				Str("client_addr", clientIP).
 				Str("dest_addr", r.URL.String()).
 				Str("latency", fmt.Sprintf("%dms", latency)).
-				Msg("Failed to resolve destination")
-			http.Error(w, err.Error(), http.StatusBadGateway)
+				Msg("Failed to resolve destination - Bad Gateway")
+			http.Error(w, "Bad gateway: failed to resolve destination", http.StatusBadGateway)
 			return
 		}
 		destAddr = net.JoinHostPort(ip.String(), r.URL.Port())
@@ -192,16 +193,18 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 			Str("client_addr", clientIP).
 			Str("dest_addr", r.URL.String()).
 			Str("latency", fmt.Sprintf("%dms", latency)).
-			Msg("Failed to create request")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+			Msg("Failed to create request - Internal Server Error")
+		http.Error(w, "Internal server error while creating request", http.StatusInternalServerError)
 		return
 	}
 
 	for key, values := range r.Header {
-		if !isHopHeader(key) {
-			for _, value := range values {
-				proxyReq.Header.Add(key, value)
-			}
+		if isHopHeader(key) {
+			continue
+		}
+
+		for _, value := range values {
+			proxyReq.Header.Add(key, value)
 		}
 	}
 
@@ -215,8 +218,8 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 			Str("client_addr", clientIP).
 			Str("dest_addr", r.URL.String()).
 			Str("latency", fmt.Sprintf("%dms", latency)).
-			Msg("Failed to send request")
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			Msg("Failed to send request - Bad Gateway")
+		http.Error(w, "Bad gateway: failed to send request", http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
@@ -225,13 +228,15 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		Str("client_addr", clientIP).
 		Str("dest_addr", r.URL.String()).
 		Str("latency", fmt.Sprintf("%dms", latency)).
-		Msg("HTTP request completed")
+		Msg("HTTP request successfully proxied")
+
+	for _, key := range hopHeaders {
+		resp.Header.Del(key)
+	}
 
 	for key, values := range resp.Header {
 		if !isHopHeader(key) {
-			for _, value := range values {
-				w.Header().Add(key, value)
-			}
+			w.Header()[key] = values
 		}
 	}
 
@@ -241,11 +246,10 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 
 func isHopHeader(header string) bool {
 	header = strings.ToLower(header)
-	for _, hopHeader := range hopHeaders {
-		if header == strings.ToLower(hopHeader) {
+	for _, h := range hopHeaders {
+		if strings.EqualFold(header, h) {
 			return true
 		}
 	}
-
 	return false
 }
