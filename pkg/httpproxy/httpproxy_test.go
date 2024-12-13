@@ -18,6 +18,10 @@ import (
 
 type MockCredentialStore struct{}
 
+func (m *MockCredentialStore) Add(username, password string) {
+
+}
+
 func (m *MockCredentialStore) Valid(username, password string) bool {
 	return username == "user" && password == "password"
 }

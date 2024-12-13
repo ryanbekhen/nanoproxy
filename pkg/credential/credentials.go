@@ -5,6 +5,7 @@ import (
 )
 
 type Store interface {
+	Add(user, password string)
 	Valid(user, password string) bool
 }
 
@@ -19,12 +20,7 @@ func NewStaticCredentialStore() *StaticCredentialStore {
 }
 
 func (s StaticCredentialStore) Add(user, password string) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return
-	}
-
-	s.store[user] = string(hash)
+	s.store[user] = password
 }
 
 func (s StaticCredentialStore) Valid(user, password string) bool {

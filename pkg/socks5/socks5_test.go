@@ -48,9 +48,9 @@ func TestListenAndServe(t *testing.T) {
 	}()
 	lAddr := l.Addr().(*net.TCPAddr)
 
-	credentials := credential.StaticCredentialStore{
-		"foo": "$2y$05$Xr4Vj6wbsCuf70.Fif2guuX8Ez97GB0VysyCTRL2EMkIikCpY/ugi", // foo:bar
-	}
+	credentials := credential.NewStaticCredentialStore()
+	credentials.Add("foo", "$2y$05$Xr4Vj6wbsCuf70.Fif2guuX8Ez97GB0VysyCTRL2EMkIikCpY/ugi")
+
 	auth := &UserPassAuthenticator{Credentials: credentials}
 	conf := &Config{
 		Authentication: []Authenticator{auth},
@@ -112,9 +112,8 @@ func TestListenAndServe_InvalidCredentials(t *testing.T) {
 
 	lAddr := l.Addr().(*net.TCPAddr)
 
-	credentials := credential.StaticCredentialStore{
-		"foo": "bar",
-	}
+	credentials := credential.NewStaticCredentialStore()
+	credentials.Add("foo", "bar")
 	auth := &UserPassAuthenticator{Credentials: credentials}
 	conf := &Config{
 		Authentication: []Authenticator{auth},
@@ -164,9 +163,8 @@ func TestListenAndServe_InvalidAuthType(t *testing.T) {
 	assert.NoError(t, err)
 	lAddr := l.Addr().(*net.TCPAddr)
 
-	credentials := credential.StaticCredentialStore{
-		"foo": "bar",
-	}
+	credentials := credential.NewStaticCredentialStore()
+	credentials.Add("foo", "bar")
 
 	auth := &UserPassAuthenticator{Credentials: credentials}
 	conf := &Config{

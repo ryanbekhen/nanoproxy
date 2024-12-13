@@ -33,7 +33,7 @@ func main() {
 
 	var credentials credential.Store
 	if len(cfg.Credentials) > 0 {
-		credentials := credential.NewStaticCredentialStore()
+		credentials = credential.NewStaticCredentialStore()
 		for _, cred := range cfg.Credentials {
 			credArr := strings.Split(cred, ":")
 			if len(credArr) != 2 {
