@@ -10,6 +10,10 @@ type mockCredentialStore struct {
 	valid bool
 }
 
+func (m *mockCredentialStore) Add(user, password string) {
+
+}
+
 func (m *mockCredentialStore) Valid(user, password string) bool {
 	return m.valid
 }

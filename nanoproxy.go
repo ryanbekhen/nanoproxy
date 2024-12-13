@@ -31,14 +31,17 @@ func main() {
 		time.Local = loc
 	}
 
-	credentials := credential.StaticCredentialStore{}
-	for _, cred := range cfg.Credentials {
-		credArr := strings.Split(cred, ":")
-		if len(credArr) != 2 {
-			logger.Fatal().Msgf("Invalid credential: %s", cred)
-		}
+	var credentials credential.Store
+	if len(cfg.Credentials) > 0 {
+		credentials = credential.NewStaticCredentialStore()
+		for _, cred := range cfg.Credentials {
+			credArr := strings.Split(cred, ":")
+			if len(credArr) != 2 {
+				logger.Fatal().Msgf("Invalid credential: %s", cred)
+			}
 
-		credentials[credArr[0]] = credArr[1]
+			credentials.Add(credArr[0], credArr[1])
+		}
 	}
 
 	dnsResolver := &resolver.DNSResolver{}
@@ -77,7 +80,7 @@ func main() {
 		}()
 	}
 
-	if len(credentials) > 0 {
+	if len(cfg.Credentials) > 0 {
 		authenticator := &socks5.UserPassAuthenticator{
 			Credentials: credentials,
 		}
