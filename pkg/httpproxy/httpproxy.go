@@ -170,22 +170,6 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	destAddr := r.URL.Host
-	if s.config.Resolver != nil {
-		ip, err := s.config.Resolver.Resolve(destAddr)
-		if err != nil {
-			latency := time.Since(startTime).Milliseconds()
-			s.config.Logger.Error().
-				Str("client_addr", clientIP).
-				Str("dest_addr", r.URL.String()).
-				Str("latency", fmt.Sprintf("%dms", latency)).
-				Msg("Failed to resolve destination - Bad Gateway")
-			http.Error(w, "Bad gateway: failed to resolve destination", http.StatusBadGateway)
-			return
-		}
-		destAddr = net.JoinHostPort(ip.String(), r.URL.Port())
-	}
-
 	proxyReq, err := http.NewRequest(r.Method, r.URL.String(), r.Body)
 	if err != nil {
 		latency := time.Since(startTime).Milliseconds()

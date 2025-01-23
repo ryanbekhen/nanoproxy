@@ -92,7 +92,7 @@ func TestServer_ServeHTTP(t *testing.T) {
 	})
 
 	t.Run("Handle HTTP - successful authorization but Dial fails", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+		req := httptest.NewRequest(http.MethodGet, "https://badgatewaytesting.com", nil)
 		req.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("user:password")))
 		rr := httptest.NewRecorder()
 
@@ -102,14 +102,14 @@ func TestServer_ServeHTTP(t *testing.T) {
 	})
 
 	t.Run("Handle HTTP - failed to resolve host", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "http://invalidhost.com", nil)
+		req := httptest.NewRequest(http.MethodGet, "http://invalidhostinvalidhostinvalidhost.com", nil)
 		req.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("user:password")))
 		rr := httptest.NewRecorder()
 
 		server.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusBadGateway, rr.Code)
-		assert.Contains(t, rr.Body.String(), "Bad gateway: failed to resolve destination")
+		assert.Contains(t, rr.Body.String(), "Bad gateway: failed to send request")
 	})
 }
 
@@ -291,10 +291,7 @@ func TestServer_HandleHTTP_ClientDoError(t *testing.T) {
 
 		server.ServeHTTP(rr, proxyReq)
 
-		// Kode status harus 502: Bad Gateway karena resolve gagal
 		assert.Equal(t, http.StatusBadGateway, rr.Code)
-
-		// Validasi pesan error
-		assert.Contains(t, rr.Body.String(), "Bad gateway: failed to resolve destination")
+		assert.Contains(t, rr.Body.String(), "Bad gateway: failed to send request")
 	})
 }

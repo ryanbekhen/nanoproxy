@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"github.com/caarlos0/env/v10"
 	"github.com/rs/zerolog"
 	"github.com/ryanbekhen/nanoproxy/pkg/config"
@@ -100,7 +101,7 @@ func main() {
 			IdleTimeout:  60 * time.Second,
 		}
 
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatal().Msg(err.Error())
 		}
 	}()
