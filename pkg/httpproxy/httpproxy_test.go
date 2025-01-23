@@ -92,7 +92,7 @@ func TestServer_ServeHTTP(t *testing.T) {
 	})
 
 	t.Run("Handle HTTP - successful authorization but Dial fails", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+		req := httptest.NewRequest(http.MethodGet, "https://badgatewaytesting.com", nil)
 		req.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("user:password")))
 		rr := httptest.NewRecorder()
 
