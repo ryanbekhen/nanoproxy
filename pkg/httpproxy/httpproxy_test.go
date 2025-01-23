@@ -291,10 +291,7 @@ func TestServer_HandleHTTP_ClientDoError(t *testing.T) {
 
 		server.ServeHTTP(rr, proxyReq)
 
-		// Kode status harus 502: Bad Gateway karena resolve gagal
 		assert.Equal(t, http.StatusBadGateway, rr.Code)
-
-		// Validasi pesan error
-		assert.Contains(t, rr.Body.String(), "Bad gateway: failed to resolve destination")
+		assert.Contains(t, rr.Body.String(), "Bad gateway: failed to send request")
 	})
 }
