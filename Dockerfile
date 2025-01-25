@@ -1,4 +1,4 @@
-FROM busybox:1.36.1-glibc
+FROM alpine:3
 
 COPY nanoproxy /usr/bin/nanoproxy
 EXPOSE 1080
