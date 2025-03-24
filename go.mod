@@ -4,7 +4,7 @@ go 1.23
 
 require (
 	github.com/caarlos0/env/v10 v10.0.0
-	github.com/rs/zerolog v1.33.0
+	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/crypto v0.32.0
 	golang.org/x/net v0.34.0
