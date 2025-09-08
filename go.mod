@@ -7,7 +7,7 @@ toolchain go1.24.2
 require (
 	github.com/caarlos0/env/v10 v10.0.0
 	github.com/rs/zerolog v1.34.0
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.40.0
 	golang.org/x/net v0.42.0
 )
