@@ -1,7 +1,9 @@
 package admin
 
 import (
+	"embed"
 	"encoding/json"
+	"html/template"
 	"net/http"
 	"strings"
 
@@ -9,6 +11,9 @@ import (
 	"github.com/ryanbekhen/nanoproxy/pkg/credential"
 	"github.com/ryanbekhen/nanoproxy/pkg/userstore"
 )
+
+//go:embed templates/*.gohtml
+var templatesFS embed.FS
 
 // Config holds the configuration for the admin panel
 type Config struct {
@@ -19,13 +24,21 @@ type Config struct {
 
 // Handler handles admin panel requests
 type Handler struct {
-	config *Config
+	config    *Config
+	templates *template.Template
 }
 
 // New creates a new admin handler
 func New(config *Config) *Handler {
+	// Parse templates
+	tmpl, err := template.ParseFS(templatesFS, "templates/*.gohtml")
+	if err != nil {
+		config.Logger.Fatal().Err(err).Msg("Failed to parse templates")
+	}
+
 	return &Handler{
-		config: config,
+		config:    config,
+		templates: tmpl,
 	}
 }
 
@@ -42,6 +55,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Path == "/admin" || r.URL.Path == "/admin/":
 		h.handleAdminPanel(w, r)
+	case r.URL.Path == "/admin/users-table":
+		h.handleUsersTable(w, r)
 	case r.URL.Path == "/admin/api/users" && r.Method == http.MethodGet:
 		h.handleListUsers(w, r)
 	case r.URL.Path == "/admin/api/users" && r.Method == http.MethodPost:
@@ -72,8 +87,33 @@ func (h *Handler) authenticate(r *http.Request) bool {
 
 // handleAdminPanel serves the admin panel UI
 func (h *Handler) handleAdminPanel(w http.ResponseWriter, r *http.Request) {
+	users := h.config.UserStore.List()
+	
+	data := map[string]interface{}{
+		"Users":     users,
+		"UserCount": len(users),
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(adminPanelHTML))
+	if err := h.templates.ExecuteTemplate(w, "index.gohtml", data); err != nil {
+		h.config.Logger.Error().Err(err).Msg("Failed to render template")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// handleUsersTable renders just the users table partial
+func (h *Handler) handleUsersTable(w http.ResponseWriter, r *http.Request) {
+	users := h.config.UserStore.List()
+	
+	data := map[string]interface{}{
+		"Users": users,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := h.templates.ExecuteTemplate(w, "users-table", data); err != nil {
+		h.config.Logger.Error().Err(err).Msg("Failed to render users table")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
 }
 
 // handleListUsers lists all users
@@ -89,28 +129,43 @@ func (h *Handler) handleListUsers(w http.ResponseWriter, r *http.Request) {
 
 // handleCreateUser creates a new user
 func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
+	var username, password string
+
+	// Support both JSON and form data
+	contentType := r.Header.Get("Content-Type")
+	if strings.Contains(contentType, "application/json") {
+		var req struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+		username = req.Username
+		password = req.Password
+	} else {
+		// Parse form data
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Invalid form data", http.StatusBadRequest)
+			return
+		}
+		username = r.FormValue("username")
+		password = r.FormValue("password")
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	if req.Username == "" || req.Password == "" {
+	if username == "" || password == "" {
 		http.Error(w, "Username and password are required", http.StatusBadRequest)
 		return
 	}
 
-	if err := h.config.UserStore.AddUser(req.Username, req.Password); err != nil {
+	if err := h.config.UserStore.AddUser(username, password); err != nil {
 		h.config.Logger.Error().Err(err).Msg("Failed to add user")
 		http.Error(w, "Failed to create user", http.StatusInternalServerError)
 		return
 	}
 
-	h.config.Logger.Info().Str("username", req.Username).Msg("User created")
+	h.config.Logger.Info().Str("username", username).Msg("User created")
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
