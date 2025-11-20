@@ -50,8 +50,9 @@ func main() {
 
 	// Initialize credentials from both environment and user store
 	var credentials credential.Store
+	var adminCredentials credential.Store
 	
-	// If credentials are provided via environment, use StaticCredentialStore
+	// If credentials are provided via environment, use StaticCredentialStore for both proxy and admin
 	if len(cfg.Credentials) > 0 {
 		staticStore := credential.NewStaticCredentialStore()
 		for _, cred := range cfg.Credentials {
@@ -62,9 +63,14 @@ func main() {
 			staticStore.Add(credArr[0], credArr[1])
 		}
 		credentials = staticStore
+		adminCredentials = staticStore
 	} else {
-		// Use user store for authentication
+		// Use user store for proxy authentication
 		credentials = userStore
+		// Only use credentials for admin if there are users in the store
+		if userStore.Count() > 0 {
+			adminCredentials = userStore
+		}
 	}
 
 	dnsResolver := &resolver.DNSResolver{}
@@ -116,7 +122,7 @@ func main() {
 	if cfg.AdminEnabled {
 		adminConfig := &admin.Config{
 			UserStore:   userStore,
-			Credentials: credentials,
+			Credentials: adminCredentials,
 			Logger:      &logger,
 		}
 		adminHandler := admin.New(adminConfig)
