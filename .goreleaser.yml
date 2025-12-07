@@ -130,7 +130,6 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end -}}
-    format: zip
     format_overrides:
       - formats: [ 'zip' ]
     builds_info:

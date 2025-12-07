@@ -1,6 +1,6 @@
 FROM alpine:3
-
-COPY nanoproxy /usr/bin/nanoproxy
+ARG TARGETPLATFORM
+COPY $TARGETPLATFORM/nanoproxy /usr/bin
 EXPOSE 1080
 EXPOSE 8080
 

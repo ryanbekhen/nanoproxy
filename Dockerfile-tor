@@ -5,7 +5,7 @@ RUN apk update && \
 
 RUN mkdir -p /var/log/supervisor
 
-COPY nanoproxy /usr/bin/nanoproxy
+COPY $TARGETPLATFORM/nanoproxy /usr/bin
 COPY supervisord.conf /etc/supervisord.conf
 
 RUN mkdir -p /etc/tor && \
