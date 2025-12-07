@@ -82,7 +82,8 @@ changelog:
       - go mod tidy
 
 dockers_v2:
-  - images:
+  - id: nanoproxy
+    images:
       - "ghcr.io/ryanbekhen/nanoproxy"
     tags:
       - "latest"
@@ -101,7 +102,8 @@ dockers_v2:
     extra_files:
       - supervisord.conf
 
-  - images:
+  - id: nanoproxy-tor
+    images:
       - "ghcr.io/ryanbekhen/nanoproxy-tor"
     tags:
       - "latest"
@@ -190,7 +192,6 @@ nfpms:
         dst: /etc/nanoproxy/nanoproxy
         type: "config|noreplace"
     formats:
-      - apk
       - deb
       - rpm
     deb:
