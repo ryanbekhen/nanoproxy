@@ -228,6 +228,15 @@ archives:
       - README.md
       - LICENSE
 
+  - id: windows_amd64
+    ids:
+      - windows-amd64
+    name_template: "nanoproxy_Windows_x86_64"
+    formats: [ "zip" ]
+    files:
+      - README.md
+      - LICENSE
+
 homebrew_casks:
   - name: nanoproxy
     ids:
