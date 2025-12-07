@@ -1,5 +1,7 @@
 name: Test Coverage
 run-name: Test Coverage
+permissions:
+  contents: read
 
 on:
   pull_request:
