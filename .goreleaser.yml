@@ -81,63 +81,44 @@ changelog:
       - Merge branch
       - go mod tidy
 
-dockers:
-  - image_templates:
-      - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}-amd64"
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - "--label=io.artifacthub.package.readme-url=https://raw.githubusercontent.com/ryanbekhen/nanoproxy/main/README.md"
-      - '--label=io.artifacthub.package.maintainers=[{"name":"Achmad Irianto Eka Putra","email":"i@ryanbekhen.dev"}]'
-      - "--label=io.artifacthub.package.license=MIT"
-      - "--label=org.opencontainers.image.description=Nanoproxy is a simple proxy written in Go."
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.name={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--label=org.opencontainers.image.source={{.GitURL}}"
-      - "--platform=linux/amd64"
-  - image_templates:
-      - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}-arm64"
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - "--label=io.artifacthub.package.readme-url=https://raw.githubusercontent.com/ryanbekhen/nanoproxy/main/README.md"
-      - '--label=io.artifacthub.package.maintainers=[{"name":"Achmad Irianto Eka Putra","email":"i@ryanbekhen.dev"}]'
-      - "--label=io.artifacthub.package.license=MIT"
-      - "--label=org.opencontainers.image.description=Nanoproxy is a simple proxy written in Go."
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.name={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--label=org.opencontainers.image.source={{.GitURL}}"
-      - "--platform=linux/arm64"
-    goarch: arm64
-
-  - image_templates:
-      - "ghcr.io/ryanbekhen/nanoproxy-tor:{{ .Version }}-amd64"
-    dockerfile: Dockerfile-tor
-    build_flag_templates:
-      - "--label=io.artifacthub.package.readme-url=https://raw.githubusercontent.com/ryanbekhen/nanoproxy/main/README.md"
-      - '--label=io.artifacthub.package.maintainers=[{"name":"Achmad Irianto Eka Putra","email":"i@ryanbekhen.dev"}]'
-      - "--label=io.artifacthub.package.license=MIT"
-      - "--label=org.opencontainers.image.description=Nanoproxy is a simple proxy written in Go."
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.name={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--label=org.opencontainers.image.source={{.GitURL}}"
-      - "--platform=linux/amd64"
-    extra_files:
-      - supervisord.conf
-
 dockers_v2:
   - images:
       - "ghcr.io/ryanbekhen/nanoproxy"
+    tags:
+      - "latest"
+      - "{{ .Version }}"
+    dockerfile: Dockerfile
+    labels:
+      "io.artifacthub.package.readme-url": "https://raw.githubusercontent.com/ryanbekhen/nanoproxy/main/README.md"
+      "io.artifacthub.package.maintainers": "[{\"name\":\"Achmad Irianto Eka Putra\",\"email\":\"i@ryanbekhen.dev\"}]"
+      "io.artifacthub.package.license": "MIT"
+      "org.opencontainers.image.description": "Nanoproxy is a simple proxy written in Go."
+      "org.opencontainers.image.created": "{{.Date}}"
+      "org.opencontainers.image.name": "{{.ProjectName}}"
+      "org.opencontainers.image.revision": "{{.FullCommit}}"
+      "org.opencontainers.image.version": "{{.Version}}"
+      "org.opencontainers.image.source": "{{.GitURL}}"
+    extra_files:
+      - supervisord.conf
+
+  - images:
       - "ghcr.io/ryanbekhen/nanoproxy-tor"
     tags:
       - "latest"
       - "{{ .Version }}"
-      - "{{ .Version }}-amd64"
-      - "{{ .Version }}-arm64"
+    dockerfile: Dockerfile-tor
+    labels:
+      "io.artifacthub.package.readme-url": "https://raw.githubusercontent.com/ryanbekhen/nanoproxy/main/README.md"
+      "io.artifacthub.package.maintainers": "[{\"name\":\"Achmad Irianto Eka Putra\",\"email\":\"i@ryanbekhen.dev\"}]"
+      "io.artifacthub.package.license": "MIT"
+      "org.opencontainers.image.description": "Nanoproxy is a simple proxy written in Go."
+      "org.opencontainers.image.created": "{{.Date}}"
+      "org.opencontainers.image.name": "{{.ProjectName}}"
+      "org.opencontainers.image.revision": "{{.FullCommit}}"
+      "org.opencontainers.image.version": "{{.Version}}"
+      "org.opencontainers.image.source": "{{.GitURL}}"
+    extra_files:
+      - supervisord.conf
 
 archives:
   - name_template: >-
