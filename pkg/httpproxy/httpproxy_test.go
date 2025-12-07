@@ -5,8 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"github.com/rs/zerolog"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"net"
 	"net/http"
@@ -14,6 +12,9 @@ import (
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 )
 
 type MockCredentialStore struct{}
@@ -91,8 +92,15 @@ func TestServer_ServeHTTP(t *testing.T) {
 		assert.Contains(t, rr.Body.String(), "Proxy authentication required")
 	})
 
-	t.Run("Handle HTTP - successful authorization but Dial fails", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "https://badgatewaytesting.com", nil)
+	t.Run("Handle HTTP - successful authorization but backend unreachable", func(t *testing.T) {
+		// Create a local backend server and immediately close it to simulate unreachable target
+		backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		backendURL := backend.URL
+		backend.Close()
+
+		req := httptest.NewRequest(http.MethodGet, backendURL, nil)
 		req.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("user:password")))
 		rr := httptest.NewRecorder()
 
@@ -195,7 +203,22 @@ func TestProxy_ForwardRequests(t *testing.T) {
 }
 
 func TestServer_HandleHTTP_WithProxyRequest(t *testing.T) {
-	targetURL := "http://httpbin.org"
+	// Local echo server to avoid hitting public URLs
+	echoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		headers := map[string]string{}
+		for k, v := range r.Header {
+			if len(v) > 0 {
+				headers[k] = v[0]
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"headers": headers,
+		})
+	}))
+	defer echoServer.Close()
+
+	targetURL := echoServer.URL
 	logger := zerolog.New(io.Discard)
 
 	proxy := New(&Config{
