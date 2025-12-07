@@ -55,8 +55,13 @@ type Request struct {
 
 func NewRequest(bufferConn io.Reader) (*Request, error) {
 	header := []byte{0, 0, 0}
-	if _, err := io.ReadAtLeast(bufferConn, header, 3); err != nil {
+	n, err := io.ReadAtLeast(bufferConn, header, 3)
+	if err != nil {
 		return nil, fmt.Errorf("failed to read header: %w", err)
+	}
+
+	if n < 1 {
+		return nil, fmt.Errorf("header too short, expected at least 1 byte")
 	}
 
 	if header[0] != Version {
@@ -162,7 +167,7 @@ func sendReply(conn io.Writer, reply uint8, addr *AddrSpec) error {
 		addrPort = uint16(addr.Port)
 
 	default:
-		return fmt.Errorf("unrecognized address type: %v", addr)
+		return fmt.Errorf("unrecognized address type")
 	}
 
 	// Format the message
