@@ -1,4 +1,4 @@
-version: 1
+version: 2
 
 project_name: nanoproxy
 
@@ -9,7 +9,7 @@ before:
     - go mod tidy
 
 snapshot:
-  name_template: '{{ incpatch .Version }}-next'
+  version_template: '{{ incpatch .Version }}-next'
 
 metadata:
   mod_timestamp: "{{ .CommitTimestamp }}"
@@ -129,21 +129,15 @@ dockers:
     extra_files:
       - supervisord.conf
 
-docker_manifests:
-  - name_template: "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}"
-    image_templates:
-      - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}-amd64"
-      - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}-arm64"
-  - name_template: "ghcr.io/ryanbekhen/nanoproxy:latest"
-    image_templates:
-      - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}-amd64"
-      - "ghcr.io/ryanbekhen/nanoproxy:{{ .Version }}-arm64"
-  - name_template: "ghcr.io/ryanbekhen/nanoproxy-tor:{{ .Version }}"
-    image_templates:
-      - "ghcr.io/ryanbekhen/nanoproxy-tor:{{ .Version }}-amd64"
-  - name_template: "ghcr.io/ryanbekhen/nanoproxy-tor:latest"
-    image_templates:
-      - "ghcr.io/ryanbekhen/nanoproxy-tor:{{ .Version }}-amd64"
+dockers_v2:
+  - images:
+      - "ghcr.io/ryanbekhen/nanoproxy"
+      - "ghcr.io/ryanbekhen/nanoproxy-tor"
+    tags:
+      - "latest"
+      - "{{ .Version }}"
+      - "{{ .Version }}-amd64"
+      - "{{ .Version }}-arm64"
 
 archives:
   - name_template: >-
@@ -154,8 +148,7 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end -}}
     format_overrides:
-      - goos: windows
-        format: zip
+      - formats: [ 'zip' ]
     builds_info:
       group: root
       owner: root
@@ -163,18 +156,19 @@ archives:
       - README.md
       - LICENSE
 
-brews:
+homebrew_casks:
   - name: nanoproxy
     repository:
       owner: ryanbekhen
       name: homebrew-nanoproxy
     directory: Formula
-    goarm: 7
     homepage: https://github.com/ryanbekhen/nanoproxy
     description: "Simple Socks5 Proxy written in Go"
     license: "MIT"
-    install: |
-      bin.install "nanoproxy"
+    hooks:
+      post:
+        install: |
+          bin.install "nanoproxy"
 
 winget:
   - name: nanoproxy
