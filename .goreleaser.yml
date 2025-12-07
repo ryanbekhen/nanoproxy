@@ -192,21 +192,38 @@ dockers_v2:
       - supervisord.conf
 
 archives:
-  - ids:
-      - darwin-arm64
+  - id: darwin_arm64
+    ids:
+      - darwin-arm64  # Match build ID
+    name_template: "nanoproxy_Darwin_arm64"
+    formats: [ "tar.gz" ]
+    files:
+      - README.md
+      - LICENSE
+
+  - id: darwin_amd64
+    ids:
       - darwin-amd64
+    name_template: "nanoproxy_Darwin_x86_64"
+    formats: [ "tar.gz" ]
+    files:
+      - README.md
+      - LICENSE
+
+  - id: linux_amd64
+    ids:
       - linux-amd64
+    name_template: "nanoproxy_Linux_x86_64"
+    formats: [ "tar.gz" ]
+    files:
+      - README.md
+      - LICENSE
+
+  - id: linux_arm64
+    ids:
       - linux-arm64
-      - windows-amd64
-    name_template: >-
-      {{- .ProjectName }}_
-      {{- title .Os }}_
-      {{- if eq .Arch "amd64" }}x86_64
-      {{- else }}{{ .Arch }}{{ end }}
-    formats: [ "zip", "tar.gz" ]
-    format_overrides:
-      - goos: windows
-        formats: [ "zip" ]
+    name_template: "nanoproxy_Linux_arm64"
+    formats: [ "tar.gz" ]
     files:
       - README.md
       - LICENSE
