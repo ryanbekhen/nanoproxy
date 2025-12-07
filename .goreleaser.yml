@@ -115,6 +115,8 @@ dockers_v2:
       "org.opencontainers.image.revision": "{{.FullCommit}}"
       "org.opencontainers.image.version": "{{.Version}}"
       "org.opencontainers.image.source": "{{.GitURL}}"
+    platforms:
+      - "linux/amd64"
     extra_files:
       - supervisord.conf
 
