@@ -9,19 +9,28 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Ensure directory-based coverage is not enabled; avoids requiring `go tool covdata`
+      GOCOVERDIR: ""
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Go 1.21
-        uses: actions/setup-go@v2
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          go-version: 1.21
+          # Use the version from go.mod to keep CI/tooling in sync
+          go-version-file: go.mod
 
       - name: Generate Test Coverage
-        run: go test ./... -coverprofile=./cover.out
+        shell: bash
+        run: |
+          unset GOCOVERDIR
+          go version
+          go tool -n covdata || true
+          go test ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./...
 
       - name: Check Test Coverage
         id: coverage
