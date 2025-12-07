@@ -15,45 +15,7 @@ metadata:
   mod_timestamp: "{{ .CommitTimestamp }}"
 
 builds:
-  - id: darwin-arm64
-    binary: nanoproxy
-    ldflags:
-      - -s -w
-      - -X nanoproxy.version={{.Version}}
-      - -X nanoproxy.commit={{.Commit}}
-      - -X nanoproxy.date={{ .CommitDate }}
-      - -X nanoproxy.builtBy=goreleaser
-      - -X nanoproxy.treeState={{ .IsGitDirty }}
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - darwin
-    goarch:
-      - arm64
-    mod_timestamp: "{{ .CommitTimestamp }}"
-    flags:
-      - -trimpath
-
-  - id: darwin-amd64
-    binary: nanoproxy
-    ldflags:
-      - -s -w
-      - -X nanoproxy.version={{.Version}}
-      - -X nanoproxy.commit={{.Commit}}
-      - -X nanoproxy.date={{ .CommitDate }}
-      - -X nanoproxy.builtBy=goreleaser
-      - -X nanoproxy.treeState={{ .IsGitDirty }}
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - darwin
-    goarch:
-      - amd64
-    mod_timestamp: "{{ .CommitTimestamp }}"
-    flags:
-      - -trimpath
-
-  - id: linux-amd64
+  - id: nanoproxy
     binary: nanoproxy
     ldflags:
       - -s -w
@@ -66,46 +28,14 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
-    goarch:
-      - amd64
-    mod_timestamp: "{{ .CommitTimestamp }}"
-    flags:
-      - -trimpath
-
-  - id: linux-arm64
-    binary: nanoproxy
-    ldflags:
-      - -s -w
-      - -X nanoproxy.version={{.Version}}
-      - -X nanoproxy.commit={{.Commit}}
-      - -X nanoproxy.date={{ .CommitDate }}
-      - -X nanoproxy.builtBy=goreleaser
-      - -X nanoproxy.treeState={{ .IsGitDirty }}
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - linux
-    goarch:
-      - arm64
-    mod_timestamp: "{{ .CommitTimestamp }}"
-    flags:
-      - -trimpath
-
-  - id: windows-amd64
-    binary: nanoproxy
-    ldflags:
-      - -s -w
-      - -X nanoproxy.version={{.Version}}
-      - -X nanoproxy.commit={{.Commit}}
-      - -X nanoproxy.date={{ .CommitDate }}
-      - -X nanoproxy.builtBy=goreleaser
-      - -X nanoproxy.treeState={{ .IsGitDirty }}
-    env:
-      - CGO_ENABLED=0
-    goos:
+      - darwin
       - windows
     goarch:
       - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
     mod_timestamp: "{{ .CommitTimestamp }}"
     flags:
       - -trimpath
@@ -189,70 +119,27 @@ dockers_v2:
       - supervisord.conf
 
 archives:
-  - id: darwin_arm64
+  - id: default
     ids:
-      - darwin-arm64  # Match build ID
-    name_template: "nanoproxy_Darwin_arm64"
-    formats: [ "tar.gz" ]
+      - nanoproxy
+    name_template: >-
+      {{- .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
     files:
       - README.md
       - LICENSE
 
-  - id: darwin_amd64
-    ids:
-      - darwin-amd64
-    name_template: "nanoproxy_Darwin_x86_64"
-    formats: [ "tar.gz" ]
-    files:
-      - README.md
-      - LICENSE
-
-  - id: linux_amd64
-    ids:
-      - linux-amd64
-    name_template: "nanoproxy_Linux_x86_64"
-    formats: [ "tar.gz" ]
-    files:
-      - README.md
-      - LICENSE
-
-  - id: linux_arm64
-    ids:
-      - linux-arm64
-    name_template: "nanoproxy_Linux_arm64"
-    formats: [ "tar.gz" ]
-    files:
-      - README.md
-      - LICENSE
-
-  - id: windows_amd64
-    ids:
-      - windows-amd64
-    name_template: "nanoproxy_Windows_x86_64"
-    formats: [ "zip" ]
-    files:
-      - README.md
-      - LICENSE
 
 homebrew_casks:
-  - name: nanoproxy-arm64
-    ids:
-      - darwin-arm64
-    repository:
-      owner: ryanbekhen
-      name: homebrew-nanoproxy
-    directory: Casks
-    homepage: https://github.com/ryanbekhen/nanoproxy
-    description: "Simple Socks5 Proxy written in Go"
-    license: "MIT"
-    hooks:
-      post:
-        install: |
-          bin.install "nanoproxy"
-
-  - name: nanoproxy-amd64
-    ids:
-      - darwin-amd64
+  - name: nanoproxy
     repository:
       owner: ryanbekhen
       name: homebrew-nanoproxy
