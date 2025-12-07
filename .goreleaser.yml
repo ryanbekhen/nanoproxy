@@ -213,6 +213,9 @@ archives:
 
 homebrew_casks:
   - name: nanoproxy
+    ids:
+      - darwin-arm64
+      - darwin-amd64
     repository:
       owner: ryanbekhen
       name: homebrew-nanoproxy
