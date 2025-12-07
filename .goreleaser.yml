@@ -110,9 +110,6 @@ builds:
     flags:
       - -trimpath
 
-universal_binaries:
-  - replace: false
-
 checksum:
   name_template: "checksums.txt"
 
@@ -238,9 +235,23 @@ archives:
       - LICENSE
 
 homebrew_casks:
-  - name: nanoproxy
+  - name: nanoproxy-arm64
     ids:
       - darwin-arm64
+    repository:
+      owner: ryanbekhen
+      name: homebrew-nanoproxy
+    directory: Casks
+    homepage: https://github.com/ryanbekhen/nanoproxy
+    description: "Simple Socks5 Proxy written in Go"
+    license: "MIT"
+    hooks:
+      post:
+        install: |
+          bin.install "nanoproxy"
+
+  - name: nanoproxy-amd64
+    ids:
       - darwin-amd64
     repository:
       owner: ryanbekhen
