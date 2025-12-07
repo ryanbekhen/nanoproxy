@@ -54,13 +54,14 @@ type Request struct {
 }
 
 func NewRequest(bufferConn io.Reader) (*Request, error) {
-	header := []byte{0, 0, 0}
-	if _, err := io.ReadAtLeast(bufferConn, header, 3); err != nil {
+	var header [3]byte
+	if _, err := io.ReadFull(bufferConn, header[:]); err != nil {
 		return nil, fmt.Errorf("failed to read header: %w", err)
 	}
 
-	if header[0] != Version {
-		return nil, fmt.Errorf("unsupported version: %d", header[0])
+	hv := header[0]
+	if hv != Version {
+		return nil, fmt.Errorf("unsupported version: %d", hv)
 	}
 
 	dest, err := readAddressSpec(bufferConn)
@@ -81,13 +82,14 @@ func NewRequest(bufferConn io.Reader) (*Request, error) {
 func readAddressSpec(r io.Reader) (*AddrSpec, error) {
 	d := &AddrSpec{}
 
-	addrType := []byte{0}
-	if _, err := r.Read(addrType); err != nil {
+	var addrType [1]byte
+	if _, err := io.ReadFull(r, addrType[:]); err != nil {
 		return nil, err
 	}
 
 	// Handle on a per-type basis
-	switch AddrType(addrType[0]) {
+	at := addrType[0]
+	switch AddrType(at) {
 	case AddressTypeIPv4:
 		addr := make([]byte, 4)
 		if _, err := io.ReadAtLeast(r, addr, len(addr)); err != nil {
@@ -103,10 +105,11 @@ func readAddressSpec(r io.Reader) (*AddrSpec, error) {
 		d.IP = addr
 
 	case AddressTypeDomain:
-		if _, err := r.Read(addrType); err != nil {
+		var lenByte [1]byte
+		if _, err := io.ReadFull(r, lenByte[:]); err != nil {
 			return nil, err
 		}
-		addrLen := int(addrType[0])
+		addrLen := int(lenByte[0])
 		fqdn := make([]byte, addrLen)
 		if _, err := io.ReadAtLeast(r, fqdn, addrLen); err != nil {
 			return nil, err
@@ -114,7 +117,7 @@ func readAddressSpec(r io.Reader) (*AddrSpec, error) {
 		d.FQDN = string(fqdn)
 
 	default:
-		return nil, fmt.Errorf("unrecognized address type: %d", addrType[0])
+		return nil, fmt.Errorf("unrecognized address type: %d", at)
 	}
 
 	// Read the port
@@ -162,7 +165,7 @@ func sendReply(conn io.Writer, reply uint8, addr *AddrSpec) error {
 		addrPort = uint16(addr.Port)
 
 	default:
-		return fmt.Errorf("unrecognized address type: %v", addr)
+		return fmt.Errorf("unrecognized address type")
 	}
 
 	// Format the message
