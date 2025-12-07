@@ -38,8 +38,7 @@ jobs:
       - uses: goreleaser/goreleaser-action@v6
         if: success() && startsWith(github.ref, 'refs/tags/')
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_PAT: ${{ secrets.GH_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
           FURY_TOKEN: ${{ secrets.FURY_TOKEN }}
         with:
           version: "~> v2"
