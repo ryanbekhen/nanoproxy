@@ -1,8 +1,9 @@
 package tor
 
 import (
-	"golang.org/x/net/proxy"
 	"net"
+
+	"golang.org/x/net/proxy"
 )
 
 var customSOCKS5 = proxy.SOCKS5

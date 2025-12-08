@@ -1,8 +1,9 @@
 package socks5
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_Command_String(t *testing.T) {

@@ -2,8 +2,9 @@ package tor
 
 import (
 	"fmt"
-	"github.com/rs/zerolog"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
 func WaitForTorBootstrap(logger *zerolog.Logger, requester Requester, timeout time.Duration) error {

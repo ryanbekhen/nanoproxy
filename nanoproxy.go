@@ -2,6 +2,12 @@ package main
 
 import (
 	"errors"
+	"net"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/caarlos0/env/v10"
 	"github.com/rs/zerolog"
 	"github.com/ryanbekhen/nanoproxy/pkg/config"
@@ -10,11 +16,6 @@ import (
 	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
 	"github.com/ryanbekhen/nanoproxy/pkg/socks5"
 	"github.com/ryanbekhen/nanoproxy/pkg/tor"
-	"net"
-	"net/http"
-	"os"
-	"strings"
-	"time"
 
 	_ "time/tzdata"
 )

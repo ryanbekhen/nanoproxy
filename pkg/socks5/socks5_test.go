@@ -5,13 +5,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/ryanbekhen/nanoproxy/pkg/credential"
-	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"net"
 	"testing"
 	"time"
+
+	"github.com/ryanbekhen/nanoproxy/pkg/credential"
+	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestNew(t *testing.T) {

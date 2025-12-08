@@ -3,9 +3,10 @@ package tor_test
 import (
 	"bytes"
 	"fmt"
-	"github.com/ryanbekhen/nanoproxy/pkg/tor"
 	"net"
 	"testing"
+
+	"github.com/ryanbekhen/nanoproxy/pkg/tor"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"

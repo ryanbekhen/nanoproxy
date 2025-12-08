@@ -3,15 +3,16 @@ package httpproxy
 import (
 	"encoding/base64"
 	"fmt"
-	"github.com/rs/zerolog"
-	"github.com/ryanbekhen/nanoproxy/pkg/credential"
-	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
 	"io"
 	"net"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/ryanbekhen/nanoproxy/pkg/credential"
+	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
 )
 
 var hopHeaders = []string{

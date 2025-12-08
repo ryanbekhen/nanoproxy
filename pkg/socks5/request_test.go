@@ -3,12 +3,13 @@ package socks5
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"net"
 	"testing"
 	"time"
+
+	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
+	"github.com/stretchr/testify/assert"
 )
 
 type MockConn struct {

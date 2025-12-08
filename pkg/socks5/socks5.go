@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/rs/zerolog"
-	"github.com/ryanbekhen/nanoproxy/pkg/credential"
-	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
 	"net"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/ryanbekhen/nanoproxy/pkg/credential"
+	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
 )
 
 type Config struct {

@@ -3,8 +3,9 @@ package tor
 import (
 	"bufio"
 	"fmt"
-	"github.com/rs/zerolog"
 	"strings"
+
+	"github.com/rs/zerolog"
 )
 
 type Controller struct {

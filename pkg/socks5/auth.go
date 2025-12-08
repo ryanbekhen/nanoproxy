@@ -2,8 +2,9 @@ package socks5
 
 import (
 	"fmt"
-	"github.com/ryanbekhen/nanoproxy/pkg/credential"
 	"io"
+
+	"github.com/ryanbekhen/nanoproxy/pkg/credential"
 )
 
 // AuthType is the type of authentication used by the client to connect to the proxy server (see RFC 1928, Section 2)

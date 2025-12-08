@@ -2,9 +2,10 @@ package tor
 
 import (
 	"errors"
-	"github.com/rs/zerolog"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
 // Mock Requester untuk menggantikan implementasi sebenarnya
