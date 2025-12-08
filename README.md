@@ -115,7 +115,7 @@ NanoProxy provides the following features:
 - [x] **TOR support.** NanoProxy can be run with Tor support to provide anonymized network traffic (Docker only).
 - [x] **IP Rotation with Tor.** NanoProxy allows for IP rotation using the Tor network, providing enhanced anonymity and
   privacy by periodically changing exit nodes.
-- [ ] **Authentication Management from Dashboard.** Easily manage user authentication settings and credentials via a
+- [x] **Authentication Management from Dashboard.** Easily manage user authentication settings and credentials via a
   comprehensive and user-friendly web dashboard, ensuring secure access to proxy features.
 - [ ] **Change IP via API.** Programmatically request IP changes through a robust API, facilitating automated and
   dynamic IP management for different use cases.
@@ -208,13 +208,19 @@ nanoproxy
 You can also run NanoProxy using Docker. To do so, you can use the following command:
 
 ```shell
-docker run -p 1080:1080 -p 8080:8080 ghcr.io/ryanbekhen/nanoproxy:latest
+docker run -p 1080:1080 -p 8080:8080 -p 9090:9090 ghcr.io/ryanbekhen/nanoproxy:latest
+```
+
+To persist user data, mount a volume for the users file:
+
+```shell
+docker run -p 1080:1080 -p 8080:8080 -p 9090:9090 -v /path/to/users.json:/etc/nanoproxy/users.json ghcr.io/ryanbekhen/nanoproxy:latest
 ```
 
 You can also run NanoProxy behind Tor using the following command:
 
 ```shell
-docker run --rm -e TOR_ENABLED=true -d --privileged --cap-add=NET_ADMIN --sysctl net.ipv6.conf.all.disable_ipv6=0 --sysctl net.ipv4.conf.all.src_valid_mark=1 -p 1080:1080 -p 8080:8080 ghcr.io/ryanbekhen/nanoproxy-tor:latest
+docker run --rm -e TOR_ENABLED=true -d --privileged --cap-add=NET_ADMIN --sysctl net.ipv6.conf.all.disable_ipv6=0 --sysctl net.ipv4.conf.all.src_valid_mark=1 -p 1080:1080 -p 8080:8080 -p 9090:9090 ghcr.io/ryanbekhen/nanoproxy-tor:latest
 ```
 
 ## Configuration
@@ -250,22 +256,87 @@ password hash. You can then use the output to set the `CREDENTIALS` environment 
 
 The following table lists the available configuration options:
 
-| Name                  | Description                                                     | Default Value |
-|-----------------------|-----------------------------------------------------------------|---------------|
-| ADDR                  | The address to listen on.                                       | `:1080`       |
-| ADDR_HTTP             | The address to listen on for HTTP requests.                     | `:8080`       |
-| NETWORK               | The network to listen on. (tcp, tcp4, tcp6)                     | `tcp`         |
-| TZ                    | The timezone to use.                                            | `Local`       |
-| CLIENT_TIMEOUT        | The timeout for connecting to the destination Server.           | `10s`         |
-| DNS_TIMEOUT           | The timeout for DNS resolution.                                 | `10s`         |
-| CREDENTIALS           | The credentials to use for authentication.                      | `""`          |
-| TOR_ENABLED           | Enable Tor support. (works only on Docker)                      | `false`       |
-| TOR_IDENTITY_INTERVAL | The interval to change the Tor identity. (works only on Docker) | `10m`         |
+| Name                  | Description                                                     | Default Value                |
+|-----------------------|-----------------------------------------------------------------|------------------------------|
+| ADDR                  | The address to listen on.                                       | `:1080`                      |
+| ADDR_HTTP             | The address to listen on for HTTP requests.                     | `:8080`                      |
+| ADDR_ADMIN            | The address to listen on for the admin panel.                   | `:9090`                      |
+| NETWORK               | The network to listen on. (tcp, tcp4, tcp6)                     | `tcp`                        |
+| TZ                    | The timezone to use.                                            | `Local`                      |
+| CLIENT_TIMEOUT        | The timeout for connecting to the destination Server.           | `15s`                        |
+| DEST_TIMEOUT          | The timeout for DNS resolution.                                 | `15s`                        |
+| CREDENTIALS           | The credentials to use for authentication.                      | `""`                         |
+| TOR_ENABLED           | Enable Tor support. (works only on Docker)                      | `false`                      |
+| TOR_IDENTITY_INTERVAL | The interval to change the Tor identity. (works only on Docker) | `10m`                        |
+| USERS_FILE            | The path to the users file for persistent storage.              | `/etc/nanoproxy/users.json`  |
+| ADMIN_ENABLED         | Enable the admin panel.                                         | `true`                       |
 
 - **ADDR_HTTP**: By default, NanoProxy listens for HTTP proxy traffic on `:8080`. You can set this address to any host:
   port combination for custom setups.
+- **ADDR_ADMIN**: By default, NanoProxy listens for admin panel traffic on `:9090`. Access the admin panel by navigating
+  to `http://localhost:9090/admin` in your browser.
 - **CREDENTIALS**: When enabled, both SOCKS5 and HTTP Proxy requests are authenticated using the credentials provided in
   this field. This supports `username:password` pairs.
+- **USERS_FILE**: The path to the JSON file where user credentials are stored. This file is automatically created and
+  managed by the admin panel.
+- **ADMIN_ENABLED**: Set to `false` to disable the admin panel if you only want to use environment-based authentication.
+
+## Admin Panel
+
+NanoProxy includes a built-in admin panel for managing proxy users. The admin panel provides a user-friendly web
+interface to add, edit, and delete users without manually editing configuration files.
+
+### Accessing the Admin Panel
+
+1. Start NanoProxy with the admin panel enabled (enabled by default).
+2. Open your browser and navigate to `http://localhost:9090/admin` (or the configured `ADDR_ADMIN` address).
+3. If authentication is enabled via `CREDENTIALS`, you will be prompted to log in with admin credentials.
+
+### Admin Panel Features
+
+- **User Management**: Add, edit, and delete users through an intuitive web interface.
+- **Real-time Updates**: Changes are immediately saved to the users file and applied to the proxy.
+- **Secure Authentication**: The admin panel uses HTTP Basic Authentication when `CREDENTIALS` are configured.
+- **Password Encryption**: All passwords are automatically hashed using bcrypt before storage.
+
+### Using the Admin Panel
+
+1. **Adding Users**: Enter a username and password in the "Add New User" form and click "Add User".
+2. **Changing Passwords**: Click the "Change Password" button next to a user, enter the new password when prompted.
+3. **Deleting Users**: Click the "Delete" button next to a user and confirm the deletion.
+
+### Admin Panel API
+
+The admin panel exposes a REST API for programmatic user management:
+
+- `GET /admin/api/users` - List all users
+- `POST /admin/api/users` - Create a new user
+  - Request body: `{"username": "user", "password": "pass"}`
+- `PUT /admin/api/users/:username` - Update a user's password
+  - Request body: `{"password": "newpass"}`
+- `DELETE /admin/api/users/:username` - Delete a user
+
+All API endpoints require authentication when `CREDENTIALS` are configured.
+
+### User Storage
+
+Users created through the admin panel are stored in a JSON file (default: `/etc/nanoproxy/users.json`). This file is
+automatically created and managed by NanoProxy. The file format is:
+
+```json
+[
+  {
+    "username": "user1",
+    "password_hash": "$2a$10$..."
+  },
+  {
+    "username": "user2",
+    "password_hash": "$2a$10$..."
+  }
+]
+```
+
+You can manually edit this file if needed, but be sure to use properly bcrypt-hashed passwords.
 
 ## Logging
 

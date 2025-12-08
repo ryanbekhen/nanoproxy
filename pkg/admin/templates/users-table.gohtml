@@ -1,0 +1,42 @@
+{{ define "users-table" }}
+{{ if eq (len .Users) 0 }}
+<div class="text-center py-12 text-gray-400">
+    <svg class="w-24 h-24 mx-auto mb-4 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+    </svg>
+    <p class="text-lg">No users yet. Add your first user above!</p>
+</div>
+{{ else }}
+<div class="overflow-x-auto">
+    <table class="w-full">
+        <thead>
+            <tr class="bg-gray-50 border-b border-gray-200">
+                <th class="px-6 py-4 text-left text-sm font-semibold text-gray-700">Username</th>
+                <th class="px-6 py-4 text-left text-sm font-semibold text-gray-700">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {{ range .Users }}
+            <tr class="hover:bg-gray-50 transition-colors">
+                <td class="px-6 py-4 text-gray-800">{{ . }}</td>
+                <td class="px-6 py-4">
+                    <div class="flex gap-3">
+                        <button onclick="changePassword('{{ . }}')" 
+                                class="bg-gradient-to-r from-primary to-secondary text-white px-4 py-2 rounded-lg text-sm font-semibold hover:shadow-lg transform hover:-translate-y-0.5 transition-all">
+                            Change Password
+                        </button>
+                        <button hx-delete="/admin/api/users/{{ . }}"
+                                hx-confirm="Are you sure you want to delete user '{{ . }}'?"
+                                hx-on::after-request="if(event.detail.successful) { htmx.trigger(document.body, 'userDeleted'); }"
+                                class="bg-gradient-to-r from-pink-500 to-red-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:shadow-lg transform hover:-translate-y-0.5 transition-all">
+                            Delete
+                        </button>
+                    </div>
+                </td>
+            </tr>
+            {{ end }}
+        </tbody>
+    </table>
+</div>
+{{ end }}
+{{ end }}
