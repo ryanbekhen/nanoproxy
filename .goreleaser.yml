@@ -149,10 +149,6 @@ homebrew_casks:
     homepage: https://github.com/ryanbekhen/nanoproxy
     description: "Simple Socks5 Proxy written in Go"
     license: "MIT"
-    hooks:
-      post:
-        install: |
-          bin.install "nanoproxy"
 
 winget:
   - name: nanoproxy
