@@ -20,7 +20,19 @@ func NewStaticCredentialStore() *StaticCredentialStore {
 }
 
 func (s StaticCredentialStore) Add(user, password string) {
-	s.store[user] = password
+	if _, err := bcrypt.Cost([]byte(password)); err == nil {
+		// The credential is already a bcrypt hash, keep it as-is.
+		s.store[user] = password
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		// Fail closed if hashing fails.
+		return
+	}
+
+	s.store[user] = string(hash)
 }
 
 func (s StaticCredentialStore) Valid(user, password string) bool {
