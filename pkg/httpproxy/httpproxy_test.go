@@ -287,13 +287,13 @@ func TestServer_HandleHTTP_InvalidURLScheme(t *testing.T) {
 	})
 
 	t.Run("Invalid URL Scheme", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "ftp://example.com", nil) // Skema tidak valid (ftp)
+		req := httptest.NewRequest(http.MethodGet, "ftp://example.com", nil) // Invalid scheme (ftp)
 		rr := httptest.NewRecorder()
 
 		server.ServeHTTP(rr, req)
 
-		assert.Equal(t, http.StatusBadRequest, rr.Code)            // Memastikan statusnya Bad Request
-		assert.Contains(t, rr.Body.String(), "Invalid target URL") // Memastikan pesan error sesuai
+		assert.Equal(t, http.StatusBadRequest, rr.Code)            // Verify the response status is Bad Request.
+		assert.Contains(t, rr.Body.String(), "Invalid target URL") // Verify the expected error message.
 	})
 }
 

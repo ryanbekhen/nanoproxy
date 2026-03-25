@@ -214,7 +214,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	proxyReq, err := http.NewRequest(r.Method, resolvedURL.String(), proxyReqBody) // #nosec G704 -- URL is built from resolver output, not raw user input
+	proxyReq, err := http.NewRequest(r.Method, resolvedURL.String(), proxyReqBody) // #nosec G107 -- URL is built from resolver output, not raw user input
 	if err != nil {
 		latency := time.Since(startTime).Milliseconds()
 		s.config.Logger.Error().
@@ -242,7 +242,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		Timeout: s.config.ClientConnTimeout,
 	}
 
-	resp, err := client.Do(proxyReq) // #nosec G704 -- URL is built from resolver output, not raw user input
+	resp, err := client.Do(proxyReq) // #nosec G107 -- URL is built from resolver output, not raw user input
 	latency := time.Since(startTime).Milliseconds()
 	if err != nil {
 		s.config.Logger.Error().

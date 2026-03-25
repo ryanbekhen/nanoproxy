@@ -8,7 +8,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// Mock Requester untuk menggantikan implementasi sebenarnya
+// MockRequester replaces the real requester implementation in tests.
 type MockRequester struct {
 	RequestNewTorIdentityFunc func(logger *zerolog.Logger) error
 }
@@ -24,7 +24,7 @@ func TestWaitForTorBootstrap(t *testing.T) {
 	t.Run("Successful bootstrap", func(t *testing.T) {
 		mockRequester := &MockRequester{
 			RequestNewTorIdentityFunc: func(logger *zerolog.Logger) error {
-				return nil // selalu sukses
+				return nil // Always succeeds.
 			},
 		}
 
@@ -37,7 +37,7 @@ func TestWaitForTorBootstrap(t *testing.T) {
 	t.Run("Timeout occurs", func(t *testing.T) {
 		mockRequester := &MockRequester{
 			RequestNewTorIdentityFunc: func(logger *zerolog.Logger) error {
-				time.Sleep(3 * time.Second) // memicu timeout
+				time.Sleep(3 * time.Second) // Intentionally triggers a timeout.
 				return nil
 			},
 		}
@@ -84,6 +84,6 @@ func TestSwitcherIdentity(t *testing.T) {
 		}()
 
 		time.Sleep(3 * time.Second)
-		// Tidak ada log error karena mockRequester selalu berhasil
+		// No error log is expected because mockRequester always succeeds.
 	})
 }

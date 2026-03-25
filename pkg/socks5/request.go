@@ -53,6 +53,17 @@ type Request struct {
 	Latency     time.Duration
 }
 
+var socks5DomainLengthOctets = func() [256]byte {
+	var lookup [256]byte
+	for i := uint8(0); ; i++ {
+		lookup[i] = i
+		if i == 255 {
+			break
+		}
+	}
+	return lookup
+}()
+
 func NewRequest(bufferConn io.Reader) (*Request, error) {
 	var header [3]byte
 	if _, err := io.ReadFull(bufferConn, header[:]); err != nil {
@@ -145,7 +156,7 @@ func sendReply(conn io.Writer, reply uint8, addr *AddrSpec) error {
 		if len(addr.FQDN) > 255 {
 			return fmt.Errorf("fqdn too long for socks5 domain field: %d", len(addr.FQDN))
 		}
-		fqdnLen := uint8(len(addr.FQDN)) // bounds already checked above; uint8 cast is safe // #nosec G115
+		fqdnLen := socks5DomainLengthOctets[len(addr.FQDN)]
 		addrBody = append([]byte{fqdnLen}, addr.FQDN...)
 		if addr.Port < 0 || addr.Port > 65535 {
 			return fmt.Errorf("port value out of range uint16: %d", addr.Port)
