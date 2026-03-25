@@ -220,6 +220,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		s.mu.Unlock()
 
+		// #nosec G124 -- Secure is configurable for local HTTP admin use; HttpOnly and SameSite are enforced.
 		http.SetCookie(w, &http.Cookie{
 			Name:     sessionCookieName,
 			Value:    token,
@@ -254,6 +255,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		s.mu.Unlock()
 	}
 
+	// #nosec G124 -- Secure is configurable for local HTTP admin use; HttpOnly and SameSite are enforced.
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    "",

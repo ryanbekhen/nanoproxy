@@ -6,7 +6,9 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -180,12 +182,13 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	clientIP := r.RemoteAddr
 
-	if !strings.HasPrefix(r.URL.Scheme, "http") {
+	targetURL, err := normalizeProxyTargetURL(r.URL)
+	if err != nil {
 		s.config.Logger.Error().
 			Str("client_addr", clientIP).
 			Str("dest_addr", r.URL.String()).
-			Msg("Invalid URL scheme")
-		http.Error(w, "Invalid URL scheme", http.StatusBadRequest)
+			Msg("Invalid proxy target URL")
+		http.Error(w, "Invalid target URL", http.StatusBadRequest)
 		return
 	}
 
@@ -195,7 +198,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 			session.AddUpload(n)
 		},
 	}
-	proxyReq, err := http.NewRequest(r.Method, r.URL.String(), proxyReqBody)
+	proxyReq, err := http.NewRequest(r.Method, targetURL.String(), proxyReqBody)
 	if err != nil {
 		latency := time.Since(startTime).Milliseconds()
 		s.config.Logger.Error().
@@ -220,6 +223,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	client := &http.Client{
 		Timeout: s.config.ClientConnTimeout,
 	}
+
 	resp, err := client.Do(proxyReq)
 	latency := time.Since(startTime).Milliseconds()
 	if err != nil {
@@ -267,6 +271,55 @@ func extractClientIP(remoteAddr string) string {
 		return remoteAddr
 	}
 	return host
+}
+
+func normalizeProxyTargetURL(rawURL *url.URL) (*url.URL, error) {
+	if rawURL == nil {
+		return nil, fmt.Errorf("missing target url")
+	}
+
+	scheme := strings.ToLower(strings.TrimSpace(rawURL.Scheme))
+	if scheme != "http" && scheme != "https" {
+		return nil, fmt.Errorf("unsupported url scheme: %q", rawURL.Scheme)
+	}
+
+	host := strings.TrimSpace(rawURL.Host)
+	if host == "" {
+		return nil, fmt.Errorf("missing url host")
+	}
+
+	hostname := host
+	if strings.Contains(host, ":") {
+		h, port, err := net.SplitHostPort(host)
+		if err != nil {
+			return nil, fmt.Errorf("invalid host:port")
+		}
+		if port != "" {
+			p, err := strconv.Atoi(port)
+			if err != nil || p < 1 || p > 65535 {
+				return nil, fmt.Errorf("invalid port")
+			}
+		}
+		hostname = h
+	}
+
+	if hostname == "" {
+		return nil, fmt.Errorf("missing hostname")
+	}
+
+	normalized := &url.URL{
+		Scheme:   scheme,
+		Host:     host,
+		Path:     rawURL.EscapedPath(),
+		RawPath:  rawURL.RawPath,
+		RawQuery: rawURL.RawQuery,
+	}
+
+	if normalized.Path == "" {
+		normalized.Path = "/"
+	}
+
+	return normalized, nil
 }
 
 type countingReadCloser struct {
