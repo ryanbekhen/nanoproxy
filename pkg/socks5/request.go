@@ -191,3 +191,14 @@ func relay(dst io.Writer, src io.Reader, errCh chan error) {
 	}
 	errCh <- err
 }
+
+func relayWithCount(dst io.Writer, src io.Reader, errCh chan error, onBytes func(int64)) {
+	n, err := io.Copy(dst, src)
+	if onBytes != nil && n > 0 {
+		onBytes(n)
+	}
+	if tcpConn, ok := dst.(*net.TCPConn); ok {
+		_ = tcpConn.CloseWrite()
+	}
+	errCh <- err
+}

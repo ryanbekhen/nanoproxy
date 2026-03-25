@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{.CSRFToken}}">
+    <title>NanoProxy Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body class="min-h-screen bg-slate-950 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-slate-100">
+<input id="csrf-token-value" type="hidden" value="{{.CSRFToken}}">
+
+<div id="toast-region" class="fixed right-4 top-4 z-50 w-full max-w-sm space-y-3 pointer-events-none">
+    {{template "toast.gohtml" .}}
+</div>
+
+<main class="mx-auto max-w-5xl p-4 md:p-8">
+    <header class="mb-6 rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+            <div>
+                <p class="text-xs uppercase tracking-[0.25em] text-slate-400">NanoProxy</p>
+                <h1 class="mt-1 text-2xl font-semibold text-slate-100">Admin Console</h1>
+                <p class="mt-1 text-sm text-slate-400">Manage proxy users and access credentials.</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="open-create-user-modal" type="button"
+                        class="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-300">
+                    Create user
+                </button>
+                <form method="post" action="/admin/logout">
+                    <input id="csrf-logout" type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                    <button type="submit" title="Logout"
+                            class="rounded-lg border border-white/15 bg-white/5 p-2 text-slate-300 hover:bg-white/10 hover:text-red-400 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                             stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1"/>
+                        </svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </header>
+
+    {{if .GeneratedPassword}}
+        <section class="mb-6 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-5 shadow-xl backdrop-blur">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                    <p class="text-sm font-semibold text-emerald-300">{{if .Success}}{{.Success}}{{else}}Generated credentials ready.{{end}}</p>
+                    <p class="mt-1 text-sm text-emerald-400/80">Store this password now. It is only shown once.</p>
+                </div>
+                <button type="button" id="copy-generated-password"
+                        class="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-300 hover:bg-emerald-400/20">
+                    Copy password
+                </button>
+            </div>
+            <div class="mt-4 grid gap-3 md:grid-cols-2">
+                <div>
+                    <p class="mb-1 text-xs uppercase tracking-wide text-emerald-400">Username</p>
+                    <code id="generated-username-value"
+                          class="block rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100">{{.GeneratedUsername}}</code>
+                </div>
+                <div>
+                    <p class="mb-1 text-xs uppercase tracking-wide text-emerald-400">Password</p>
+                    <code id="generated-password-value"
+                          class="block overflow-x-auto rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100">{{.GeneratedPassword}}</code>
+                </div>
+            </div>
+        </section>
+    {{end}}
+
+    <section class="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur">
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <h2 class="text-lg font-semibold text-slate-100">Proxy users</h2>
+                <span id="user-count"
+                      class="inline-flex items-center gap-1 rounded-full bg-cyan-400/10 px-2.5 py-0.5 text-xs font-semibold text-cyan-300 ring-1 ring-inset ring-cyan-400/20">
+            <span class="text-slate-400">Total:</span>
+            <span>{{.TotalUsers}}</span>
+          </span>
+                <span class="rounded-full bg-emerald-400/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-300 ring-1 ring-inset ring-emerald-400/20">Live</span>
+            </div>
+            <input id="user-search" type="search" placeholder="Search username..."
+                   class="w-full min-w-[200px] rounded-lg border border-white/15 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-cyan-400 md:w-auto">
+        </div>
+
+        <div class="overflow-hidden rounded-xl border border-white/10">
+            <table class="min-w-full border-collapse">
+                <thead>
+                <tr class="border-b border-white/10 bg-white/5 text-left">
+                    <th class="px-4 py-2 text-xs font-medium uppercase tracking-wide text-slate-400">User</th>
+                    <th class="px-4 py-2 text-right text-xs font-medium uppercase tracking-wide text-slate-400">
+                        Download
+                    </th>
+                    <th class="px-4 py-2 text-right text-xs font-medium uppercase tracking-wide text-slate-400">Upload
+                    </th>
+                    <th class="px-4 py-2 text-right text-xs font-medium uppercase tracking-wide text-slate-400">
+                        Actions
+                    </th>
+                </tr>
+                </thead>
+                <tbody id="user-rows" class="divide-y divide-white/5"
+                       hx-get="/admin/users/rows"
+                       hx-trigger="load, every 2s"
+                       hx-swap="innerHTML">
+                {{template "user_rows.gohtml" .}}
+                </tbody>
+            </table>
+        </div>
+        <p id="search-empty-state" class="mt-3 hidden text-sm text-slate-400">No users match your search.</p>
+    </section>
+</main>
+
+<div id="create-user-modal" class="fixed inset-0 z-40 hidden opacity-0 transition-opacity duration-150">
+    <div id="create-user-modal-backdrop" class="absolute inset-0 bg-slate-900/70 backdrop-blur-sm"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+        <section
+                class="relative w-full max-w-md rounded-2xl border border-white/10 bg-slate-900 p-6 shadow-2xl transform transition-all duration-150 scale-95 opacity-0">
+            <div class="mb-5 flex items-center justify-between">
+                <div>
+                    <p class="text-xs uppercase tracking-[0.25em] text-slate-400">NanoProxy</p>
+                    <h3 class="mt-0.5 text-lg font-semibold text-slate-100">Create proxy user</h3>
+                </div>
+                <button id="close-create-user-modal" type="button"
+                        class="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-sm text-slate-300 hover:bg-white/10">
+                    Close
+                </button>
+            </div>
+
+            <form method="post" action="/admin/users" class="space-y-4" hx-post="/admin/users" hx-target="body"
+                  hx-swap="outerHTML">
+                <input id="csrf-create" type="hidden" name="_csrf" value="{{.CSRFToken}}">
+                <div>
+                    <label for="create-username" class="mb-1 block text-sm text-slate-200">Username</label>
+                    <input id="create-username" name="username" type="text" required placeholder="e.g. alice"
+                           class="w-full rounded-lg border border-white/15 bg-slate-900/60 p-2.5 text-slate-100 outline-none placeholder:text-slate-500 focus:border-cyan-300"
+                           pattern="[A-Za-z0-9._-]+" minlength="3" maxlength="64"
+                           title="Use letters, numbers, dots, underscores, and hyphens (3-64 chars)">
+                    <p class="mt-1.5 text-xs text-slate-500">Letters, numbers, dots, underscores, hyphens. Length
+                        3-64.</p>
+                </div>
+                <p class="text-xs text-slate-500">Password is generated automatically by the server.</p>
+                <button type="submit"
+                        class="w-full rounded-lg bg-cyan-400 px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-cyan-300">
+                    Create user
+                </button>
+            </form>
+        </section>
+    </div>
+</div>
+
+<script>
+    (function () {
+        const modal = document.getElementById('create-user-modal');
+        const openModalButton = document.getElementById('open-create-user-modal');
+        const closeModalButton = document.getElementById('close-create-user-modal');
+        const modalBackdrop = document.getElementById('create-user-modal-backdrop');
+        const modalPanel = modal ? modal.querySelector('section') : null;
+
+        function openModal() {
+            if (!modal) return;
+            modal.classList.remove('hidden');
+            window.requestAnimationFrame(function () {
+                modal.classList.remove('opacity-0');
+                if (modalPanel) {
+                    modalPanel.classList.remove('scale-95', 'opacity-0');
+                    modalPanel.classList.add('scale-100', 'opacity-100');
+                }
+            });
+            const usernameInput = document.getElementById('create-username');
+            if (usernameInput) usernameInput.focus();
+        }
+
+        function closeModal() {
+            if (!modal) return;
+            modal.classList.add('opacity-0');
+            if (modalPanel) {
+                modalPanel.classList.remove('scale-100', 'opacity-100');
+                modalPanel.classList.add('scale-95', 'opacity-0');
+            }
+            window.setTimeout(function () {
+                modal.classList.add('hidden');
+            }, 150);
+        }
+
+        if (openModalButton) openModalButton.addEventListener('click', openModal);
+        if (closeModalButton) closeModalButton.addEventListener('click', closeModal);
+        if (modalBackdrop) modalBackdrop.addEventListener('click', closeModal);
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') closeModal();
+        });
+
+        function setupToasts() {
+            const toastRegion = document.getElementById('toast-region');
+            if (!toastRegion) return;
+            const activeToasts = toastRegion.querySelectorAll('[data-toast]:not([data-toast-bound])');
+            activeToasts.forEach(function (toast) {
+                toast.setAttribute('data-toast-bound', 'true');
+                window.requestAnimationFrame(function () {
+                    toast.classList.remove('opacity-0', 'translate-y-2');
+                });
+                window.setTimeout(function () {
+                    toast.classList.add('opacity-0', 'translate-y-1');
+                    window.setTimeout(function () {
+                        toast.remove();
+                    }, 250);
+                }, 3000);
+            });
+        }
+
+        setupToasts();
+        document.body.addEventListener('htmx:afterSwap', setupToasts);
+
+        document.body.addEventListener('htmx:configRequest', function (event) {
+            const csrfTokenField = document.getElementById('csrf-token-value');
+            const csrfToken = csrfTokenField ? csrfTokenField.value : '';
+            if (csrfToken) event.detail.headers['X-CSRF-Token'] = csrfToken;
+        });
+
+        const generatedPassword = document.getElementById('generated-password-value');
+        const copyPasswordButton = document.getElementById('copy-generated-password');
+        if (generatedPassword && copyPasswordButton && navigator.clipboard) {
+            copyPasswordButton.addEventListener('click', async function () {
+                try {
+                    await navigator.clipboard.writeText(generatedPassword.textContent.trim());
+                    copyPasswordButton.textContent = 'Copied';
+                    window.setTimeout(function () {
+                        copyPasswordButton.textContent = 'Copy password';
+                    }, 1500);
+                } catch (err) {
+                    copyPasswordButton.textContent = 'Copy failed';
+                }
+            });
+        }
+
+        const searchInput = document.getElementById('user-search');
+        const userRows = document.getElementById('user-rows');
+        const searchEmptyState = document.getElementById('search-empty-state');
+
+        function applySearch() {
+            if (!searchInput || !userRows) return;
+            const query = searchInput.value.trim().toLowerCase();
+            const rows = userRows.querySelectorAll('tr[data-username]');
+            let visible = 0;
+            rows.forEach(function (row) {
+                const match = row.getAttribute('data-username').includes(query);
+                row.style.display = match ? '' : 'none';
+                if (match) visible++;
+            });
+            if (searchEmptyState) {
+                searchEmptyState.classList.toggle('hidden', !(query.length > 0 && visible === 0));
+            }
+        }
+
+        if (searchInput) searchInput.addEventListener('input', applySearch);
+        document.body.addEventListener('htmx:afterSettle', function (e) {
+            if (e.target && e.target.id === 'user-rows') applySearch();
+        });
+    })();
+</script>
+</body>
+</html>

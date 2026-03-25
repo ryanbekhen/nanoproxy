@@ -111,7 +111,7 @@ func Test_NewRequest(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, req)
 
-	err = s.handleRequest(req, resp)
+	err = s.handleRequest(req, resp, nil)
 	assert.NoError(t, err)
 
 	// verify the response

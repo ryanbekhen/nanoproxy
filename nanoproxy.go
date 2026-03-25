@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -10,12 +11,14 @@ import (
 
 	"github.com/caarlos0/env/v10"
 	"github.com/rs/zerolog"
+	"github.com/ryanbekhen/nanoproxy/pkg/admin"
 	"github.com/ryanbekhen/nanoproxy/pkg/config"
 	"github.com/ryanbekhen/nanoproxy/pkg/credential"
 	"github.com/ryanbekhen/nanoproxy/pkg/httpproxy"
 	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
 	"github.com/ryanbekhen/nanoproxy/pkg/socks5"
 	"github.com/ryanbekhen/nanoproxy/pkg/tor"
+	"github.com/ryanbekhen/nanoproxy/pkg/traffic"
 
 	_ "time/tzdata"
 )
@@ -33,20 +36,20 @@ func main() {
 		time.Local = loc
 	}
 
-	var credentials credential.Store
-	if len(cfg.Credentials) > 0 {
-		credentials = credential.NewStaticCredentialStore()
-		for _, cred := range cfg.Credentials {
-			credArr := strings.Split(cred, ":")
-			if len(credArr) != 2 {
-				logger.Fatal().Msgf("Invalid credential: %s", cred)
-			}
-
-			credentials.Add(credArr[0], credArr[1])
-		}
+	adminEnabled := cfg.AdminUsername != "" && cfg.AdminPassword != ""
+	credentials, userFileStore, err := buildCredentialStore(cfg)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to initialize credentials")
 	}
 
 	dnsResolver := &resolver.DNSResolver{}
+	trafficTracker := traffic.NewTracker()
+
+	// Load persisted traffic totals
+	trafficStore := traffic.NewBoltStore(cfg.UserStorePath)
+	if err := trafficTracker.LoadPersistedTotals(trafficStore); err != nil {
+		logger.Warn().Err(err).Msg("Failed to load persisted traffic totals")
+	}
 
 	httpConfig := httpproxy.Config{
 		Credentials:       credentials,
@@ -55,6 +58,7 @@ func main() {
 		ClientConnTimeout: cfg.ClientTimeout,
 		Dial:              net.Dial,
 		Resolver:          dnsResolver,
+		Tracker:           trafficTracker,
 	}
 
 	httpServer := httpproxy.New(&httpConfig)
@@ -64,6 +68,7 @@ func main() {
 		DestConnTimeout:   cfg.DestTimeout,
 		ClientConnTimeout: cfg.ClientTimeout,
 		Resolver:          dnsResolver,
+		Tracker:           trafficTracker,
 	}
 
 	if cfg.TorEnabled {
@@ -82,14 +87,14 @@ func main() {
 		}()
 	}
 
-	if len(cfg.Credentials) > 0 {
+	if credentials != nil {
 		authenticator := &socks5.UserPassAuthenticator{
 			Credentials: credentials,
 		}
 		socks5Config.Authentication = append(socks5Config.Authentication, authenticator)
 	}
 
-	sock5Server := socks5.New(&socks5Config)
+	socks5Server := socks5.New(&socks5Config)
 
 	go func() {
 		logger.Info().Msgf("Starting HTTP proxy server on %s://%s", cfg.Network, cfg.ADDRHttp)
@@ -109,10 +114,69 @@ func main() {
 
 	go func() {
 		logger.Info().Msgf("Starting SOCKS5 server on %s://%s", cfg.Network, cfg.ADDR)
-		if err := sock5Server.ListenAndServe(cfg.Network, cfg.ADDR); err != nil {
+		if err := socks5Server.ListenAndServe(cfg.Network, cfg.ADDR); err != nil {
 			logger.Fatal().Msg(err.Error())
 		}
 	}()
 
+	if adminEnabled {
+		adminServer := admin.New(&admin.Config{
+			Credentials:      credentials,
+			UserStore:        userFileStore,
+			TrafficStore:     trafficStore,
+			Tracker:          trafficTracker,
+			AdminUsername:    cfg.AdminUsername,
+			AdminPassword:    cfg.AdminPassword,
+			CookieSecure:     cfg.AdminCookieSecure,
+			MaxLoginAttempts: cfg.AdminMaxLoginAttempts,
+			LoginWindow:      cfg.AdminLoginWindow,
+			LockoutDuration:  cfg.AdminLockoutDuration,
+			AllowedOrigins:   cfg.AdminAllowedOrigins,
+			Logger:           &logger,
+		})
+
+		go func() {
+			logger.Info().Msgf("Starting admin server on %s", cfg.ADDRAdmin)
+
+			server := &http.Server{
+				Addr:         cfg.ADDRAdmin,
+				Handler:      adminServer.Handler(),
+				ReadTimeout:  15 * time.Second,
+				WriteTimeout: 15 * time.Second,
+				IdleTimeout:  60 * time.Second,
+			}
+
+			if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				logger.Fatal().Msg(err.Error())
+			}
+		}()
+	}
+
 	select {}
+}
+
+func buildCredentialStore(cfg *config.Config) (*credential.StaticCredentialStore, credential.PersistentStore, error) {
+	adminEnabled := cfg.AdminUsername != "" && cfg.AdminPassword != ""
+	userStore := credential.NewBoltStore(cfg.UserStorePath)
+
+	if !adminEnabled && len(cfg.Credentials) == 0 {
+		return nil, userStore, nil
+	}
+
+	credentials := credential.NewStaticCredentialStore()
+	if adminEnabled {
+		if err := credential.LoadInto(userStore, credentials); err != nil {
+			return nil, userStore, fmt.Errorf("load persisted proxy users: %w", err)
+		}
+	}
+
+	for _, cred := range cfg.Credentials {
+		credArr := strings.SplitN(cred, ":", 2)
+		if len(credArr) != 2 || credArr[0] == "" || credArr[1] == "" {
+			return nil, userStore, fmt.Errorf("invalid credential: %s", cred)
+		}
+		credentials.SetHashed(credArr[0], credArr[1])
+	}
+
+	return credentials, userStore, nil
 }

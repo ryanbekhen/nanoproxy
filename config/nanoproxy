@@ -1,3 +1,14 @@
 ADDR=:1080
+ADDR_HTTP=:8080
+ADDR_ADMIN=:9090
 NETWORK=tcp
 TZ=Local
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=change-me
+USER_STORE_PATH=/etc/nanoproxy/data.db
+ADMIN_COOKIE_SECURE=false
+ADMIN_MAX_LOGIN_ATTEMPTS=5
+ADMIN_LOGIN_WINDOW=5m
+ADMIN_LOCKOUT_DURATION=10m
+# Optional: comma-separated origins, example https://admin.example.com
+ADMIN_ALLOWED_ORIGINS=

@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/ryanbekhen/nanoproxy/pkg/credential"
 	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
+	"github.com/ryanbekhen/nanoproxy/pkg/traffic"
 )
 
 type Config struct {
@@ -24,6 +25,7 @@ type Config struct {
 	AfterRequest      func(req *Request, conn net.Conn)
 	Resolver          resolver.Resolver
 	Rewriter          AddressRewriter
+	Tracker           *traffic.Tracker
 }
 
 type Server struct {
@@ -148,12 +150,14 @@ func (s *Server) handleConnection(conn net.Conn) {
 		return
 	}
 	request.AuthContext = authContext
+	trafficSession := s.startTrafficSession(authContext, conn)
+	defer trafficSession.Close()
 
 	if clientAddr, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
 		request.RemoteAddr = &AddrSpec{IP: clientAddr.IP, Port: clientAddr.Port}
 	}
 
-	if err := s.handleRequest(request, conn); err != nil &&
+	if err := s.handleRequest(request, conn, trafficSession); err != nil &&
 		!strings.Contains(err.Error(), "i/o timeout") {
 		s.config.Logger.Err(err).
 			Msg("request failed")
@@ -188,7 +192,7 @@ func (s *Server) authenticate(conn net.Conn, bufConn *bufio.Reader) (*Context, e
 	return nil, noAcceptable(conn)
 }
 
-func (s *Server) handleRequest(req *Request, conn net.Conn) error {
+func (s *Server) handleRequest(req *Request, conn net.Conn, trafficSession *traffic.Session) error {
 	dest := req.DestAddr
 	if dest.FQDN != "" {
 		addr, err := s.config.Resolver.Resolve(dest.FQDN)
@@ -208,7 +212,7 @@ func (s *Server) handleRequest(req *Request, conn net.Conn) error {
 
 	switch req.Command {
 	case CommandConnect:
-		return s.handleConnect(conn, req)
+		return s.handleConnect(conn, req, trafficSession)
 	// TODO: Implement these
 	//case CommandBind:
 	//	return s.handleBind(conn, req)
@@ -222,7 +226,7 @@ func (s *Server) handleRequest(req *Request, conn net.Conn) error {
 	}
 }
 
-func (s *Server) handleConnect(conn net.Conn, req *Request) error {
+func (s *Server) handleConnect(conn net.Conn, req *Request, trafficSession *traffic.Session) error {
 	dial := s.config.Dial
 	if dial == nil {
 		dial = func(network, addr string) (net.Conn, error) {
@@ -264,8 +268,8 @@ func (s *Server) handleConnect(conn net.Conn, req *Request) error {
 	}
 
 	errChan := make(chan error, 2)
-	go relay(dest, req.BufferConn, errChan)
-	go relay(conn, dest, errChan)
+	go relayWithCount(dest, req.BufferConn, errChan, trafficSession.AddUpload)
+	go relayWithCount(conn, dest, errChan, trafficSession.AddDownload)
 
 	for i := 0; i < 2; i++ {
 		if err := <-errChan; err != nil {
@@ -274,4 +278,25 @@ func (s *Server) handleConnect(conn net.Conn, req *Request) error {
 	}
 
 	return nil
+}
+
+func (s *Server) startTrafficSession(authContext *Context, conn net.Conn) *traffic.Session {
+	if s.config.Tracker == nil {
+		return nil
+	}
+	username := "anonymous"
+	if authContext != nil && authContext.Payload != nil {
+		if v := authContext.Payload["Username"]; v != "" {
+			username = v
+		}
+	}
+	return s.config.Tracker.Start(username, extractClientIP(conn.RemoteAddr().String()))
+}
+
+func extractClientIP(remoteAddr string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return remoteAddr
+	}
+	return host
 }

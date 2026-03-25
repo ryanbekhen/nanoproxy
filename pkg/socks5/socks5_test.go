@@ -30,6 +30,24 @@ func TestNew(t *testing.T) {
 	assert.IsType(t, &NoAuthAuthenticator{}, server.authentication[NoAuth])
 }
 
+func TestNew_WithCredentials(t *testing.T) {
+	creds := credential.NewStaticCredentialStore()
+	creds.Add("user", "pass")
+	conf := &Config{Credentials: creds}
+	server := New(conf)
+	assert.NotNil(t, server)
+	_, ok := server.authentication[UserPassAuth]
+	assert.True(t, ok)
+}
+
+func TestNew_DefaultNoAuth(t *testing.T) {
+	conf := &Config{} // no Authentication, no Credentials → NoAuthAuthenticator
+	server := New(conf)
+	assert.NotNil(t, server)
+	_, ok := server.authentication[NoAuth]
+	assert.True(t, ok)
+}
+
 func TestListenAndServe(t *testing.T) {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	assert.NoError(t, err)
@@ -287,7 +305,7 @@ func TestRequest_Unreachable(t *testing.T) {
 	assert.NoError(t, err)
 
 	req.realAddr = req.DestAddr
-	err = s.handleConnect(resp, req)
+	err = s.handleConnect(resp, req, nil)
 	assert.Error(t, err)
 
 	out := resp.buf.Bytes()
@@ -326,7 +344,7 @@ func TestRequest_Refused(t *testing.T) {
 	assert.NoError(t, err)
 
 	req.realAddr = req.DestAddr
-	err = s.handleConnect(resp, req)
+	err = s.handleConnect(resp, req, nil)
 	assert.Error(t, err)
 
 	out := resp.buf.Bytes()
@@ -369,7 +387,7 @@ func TestRequest_NetworkUnreachable(t *testing.T) {
 	assert.NoError(t, err)
 
 	req.realAddr = req.DestAddr
-	err = s.handleConnect(resp, req)
+	err = s.handleConnect(resp, req, nil)
 	assert.Error(t, err)
 
 	out := resp.buf.Bytes()
@@ -405,7 +423,7 @@ func TestRequest_CommandNotSupported(t *testing.T) {
 
 	resp := &MockConn{}
 	req, _ := NewRequest(buf)
-	err := s.handleRequest(req, resp)
+	err := s.handleRequest(req, resp, nil)
 	assert.Error(t, err)
 
 	out := resp.buf.Bytes()
@@ -419,4 +437,128 @@ func TestRequest_CommandNotSupported(t *testing.T) {
 	}
 
 	assert.Equal(t, expected, out)
+}
+
+func TestShutdown_NilListener(t *testing.T) {
+	server := New(&Config{})
+	err := server.Shutdown()
+	assert.NoError(t, err)
+}
+
+func TestShutdown_WithListener(t *testing.T) {
+	server := New(&Config{})
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- server.ListenAndServe("tcp", "127.0.0.1:0")
+	}()
+	// Give the goroutine time to start listening
+	time.Sleep(20 * time.Millisecond)
+	err := server.Shutdown()
+	assert.NoError(t, err)
+	select {
+	case err := <-errCh:
+		assert.Error(t, err) // serve returns after listener is closed
+	case <-time.After(time.Second):
+		t.Fatal("serve did not stop after Shutdown")
+	}
+}
+
+func TestListenAndServe_InvalidAddress(t *testing.T) {
+	server := New(&Config{})
+	err := server.ListenAndServe("tcp", "300.0.0.1:9999") // invalid IP
+	assert.Error(t, err)
+}
+
+func TestHandleRequest_WithResolver(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	assert.NoError(t, err)
+	defer l.Close()
+	lAddr := l.Addr().(*net.TCPAddr)
+
+	go func() {
+		conn, err2 := l.Accept()
+		if err2 != nil {
+			return
+		}
+		defer conn.Close()
+		buf := make([]byte, 4)
+		_, _ = io.ReadAtLeast(conn, buf, 4)
+		_, _ = conn.Write([]byte("pong"))
+	}()
+
+	s := &Server{
+		config: &Config{
+			Resolver:        &resolver.DNSResolver{},
+			DestConnTimeout: 2 * time.Second,
+		},
+	}
+
+	req := &Request{
+		Command: CommandConnect,
+		DestAddr: &AddrSpec{
+			FQDN: "localhost",
+			Port: lAddr.Port,
+		},
+		BufferConn: bytes.NewReader([]byte("ping")),
+	}
+	req.realAddr = req.DestAddr
+
+	conn := &MockConn{}
+	_ = s.handleRequest(req, conn, nil)
+}
+
+func TestHandleRequest_ResolverError(t *testing.T) {
+	s := &Server{
+		config: &Config{
+			Resolver: &mockFailResolver{},
+		},
+	}
+
+	conn := &MockConn{}
+	req := &Request{
+		Command:  CommandConnect,
+		DestAddr: &AddrSpec{FQDN: "bad.invalid", Port: 9999},
+	}
+
+	err := s.handleRequest(req, conn, nil)
+	assert.Error(t, err)
+}
+
+type mockFailResolver struct{}
+
+func (m *mockFailResolver) Resolve(_ string) (net.IP, error) {
+	return nil, errors.New("resolve failed")
+}
+
+func TestHandleRequest_WithRewriter(t *testing.T) {
+	s := &Server{
+		config: &Config{
+			Rewriter: &mockRewriter{},
+		},
+	}
+
+	buf := bytes.NewBuffer(nil)
+	buf.Write([]byte{
+		Version,
+		CommandConnect.Uint8(),
+		0,
+		AddressTypeIPv4.Uint8(),
+		127, 0, 0, 1,
+	})
+	port := []byte{0, 0}
+	binary.BigEndian.PutUint16(port, uint16(12345))
+	buf.Write(port)
+
+	conn := &MockConn{}
+	req, err := NewRequest(buf)
+	assert.NoError(t, err)
+	req.realAddr = req.DestAddr
+	// connection refused is expected — we just want to cover the Rewriter path
+	_ = s.handleRequest(req, conn, nil)
+}
+
+type mockRewriter struct{}
+
+func (m *mockRewriter) Rewrite(req *Request) *AddrSpec {
+	return req.DestAddr
 }

@@ -208,13 +208,13 @@ nanoproxy
 You can also run NanoProxy using Docker. To do so, you can use the following command:
 
 ```shell
-docker run -p 1080:1080 -p 8080:8080 ghcr.io/ryanbekhen/nanoproxy:latest
+docker run -p 1080:1080 -p 8080:8080 -p 9090:9090 ghcr.io/ryanbekhen/nanoproxy:latest
 ```
 
 You can also run NanoProxy behind Tor using the following command:
 
 ```shell
-docker run --rm -e TOR_ENABLED=true -d --privileged --cap-add=NET_ADMIN --sysctl net.ipv6.conf.all.disable_ipv6=0 --sysctl net.ipv4.conf.all.src_valid_mark=1 -p 1080:1080 -p 8080:8080 ghcr.io/ryanbekhen/nanoproxy-tor:latest
+docker run --rm -e TOR_ENABLED=true -d --privileged --cap-add=NET_ADMIN --sysctl net.ipv6.conf.all.disable_ipv6=0 --sysctl net.ipv4.conf.all.src_valid_mark=1 -p 1080:1080 -p 8080:8080 -p 9090:9090 ghcr.io/ryanbekhen/nanoproxy-tor:latest
 ```
 
 ## Configuration
@@ -225,11 +225,20 @@ desired values:
 ```text
 ADDR=:1080
 ADDR_HTTP=:8080
+ADDR_ADMIN=:9090
 NETWORK=tcp
 TZ=Asia/Jakarta
 CLIENT_TIMEOUT=10s
 DNS_TIMEOUT=10s
 CREDENTIALS=username:passwordHash
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=change-me
+USER_STORE_PATH=/etc/nanoproxy/data.db
+ADMIN_COOKIE_SECURE=true
+ADMIN_MAX_LOGIN_ATTEMPTS=5
+ADMIN_LOGIN_WINDOW=5m
+ADMIN_LOCKOUT_DURATION=10m
+ADMIN_ALLOWED_ORIGINS=https://admin.example.com
 ```
 
 For the creation of the password hash, you can use the `htpasswd -nB username` command, but you need to install the
@@ -250,22 +259,75 @@ password hash. You can then use the output to set the `CREDENTIALS` environment 
 
 The following table lists the available configuration options:
 
-| Name                  | Description                                                     | Default Value |
-|-----------------------|-----------------------------------------------------------------|---------------|
-| ADDR                  | The address to listen on.                                       | `:1080`       |
-| ADDR_HTTP             | The address to listen on for HTTP requests.                     | `:8080`       |
-| NETWORK               | The network to listen on. (tcp, tcp4, tcp6)                     | `tcp`         |
-| TZ                    | The timezone to use.                                            | `Local`       |
-| CLIENT_TIMEOUT        | The timeout for connecting to the destination Server.           | `10s`         |
-| DNS_TIMEOUT           | The timeout for DNS resolution.                                 | `10s`         |
-| CREDENTIALS           | The credentials to use for authentication.                      | `""`          |
-| TOR_ENABLED           | Enable Tor support. (works only on Docker)                      | `false`       |
-| TOR_IDENTITY_INTERVAL | The interval to change the Tor identity. (works only on Docker) | `10m`         |
+| Name                     | Description                                                     | Default Value       |
+|--------------------------|-----------------------------------------------------------------|---------------------|
+| ADDR                     | The address to listen on.                                       | `:1080`             |
+| ADDR_HTTP                | The address to listen on for HTTP requests.                     | `:8080`             |
+| ADDR_ADMIN               | The address to listen on for the admin console.                 | `:9090`             |
+| NETWORK                  | The network to listen on. (tcp, tcp4, tcp6)                     | `tcp`               |
+| TZ                       | The timezone to use.                                            | `Local`             |
+| CLIENT_TIMEOUT           | The timeout for connecting to the destination Server.           | `10s`               |
+| DNS_TIMEOUT              | The timeout for DNS resolution.                                 | `10s`               |
+| CREDENTIALS              | The credentials to use for authentication.                      | `""`                |
+| ADMIN_USERNAME           | Admin console username.                                         | `""`                |
+| ADMIN_PASSWORD           | Admin console password.                                         | `""`                |
+| USER_STORE_PATH          | BoltDB path for persisted admin-managed proxy users.            | `nanoproxy-data.db` |
+| ADMIN_COOKIE_SECURE      | Set admin session cookie as Secure (requires HTTPS).            | `false`             |
+| ADMIN_MAX_LOGIN_ATTEMPTS | Max failed admin logins allowed inside login window.            | `5`                 |
+| ADMIN_LOGIN_WINDOW       | Time window used to count failed admin login attempts.          | `5m`                |
+| ADMIN_LOCKOUT_DURATION   | Temporary lockout duration after too many failed logins.        | `10m`               |
+| ADMIN_ALLOWED_ORIGINS    | Allowed admin request origins (comma-separated, optional).      | `""`                |
+| TOR_ENABLED              | Enable Tor support. (works only on Docker)                      | `false`             |
+| TOR_IDENTITY_INTERVAL    | The interval to change the Tor identity. (works only on Docker) | `10m`               |
 
 - **ADDR_HTTP**: By default, NanoProxy listens for HTTP proxy traffic on `:8080`. You can set this address to any host:
   port combination for custom setups.
 - **CREDENTIALS**: When enabled, both SOCKS5 and HTTP Proxy requests are authenticated using the credentials provided in
-  this field. This supports `username:password` pairs.
+  this field. This supports `username:password` pairs as bootstrap credentials loaded at startup.
+- **ADMIN_USERNAME** / **ADMIN_PASSWORD**: Enable the built-in admin console for managing proxy users from the browser.
+- **USER_STORE_PATH**: Admin-created proxy users are stored on disk at this path so they survive restarts. NanoProxy
+  still authenticates requests from its in-memory credential stores, and only admin mutations trigger disk writes, so
+  the proxy hot path is not slowed down by persistence.
+- **ADMIN_COOKIE_SECURE**: Set this to `true` when serving admin over HTTPS so browser only sends the admin session
+  cookie on secure transport.
+- **ADMIN_ALLOWED_ORIGINS**: Optional CSRF-origin allowlist for admin requests. When set, admin state-changing requests
+  must include a matching `Origin` or `Referer`.
+
+## Admin Console and Persistent Proxy Users
+
+When `ADMIN_USERNAME` and `ADMIN_PASSWORD` are configured, NanoProxy starts an admin console on `ADDR_ADMIN`.
+
+- Visit `/` or `/admin` on the admin address.
+- Log in with the admin credentials from the environment.
+- Add or delete proxy users from the UI.
+- Those proxy users are saved to `USER_STORE_PATH` and loaded again on restart.
+
+Example:
+
+```shell
+ADDR=:1080
+ADDR_HTTP=:8080
+ADDR_ADMIN=:9090
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=change-me
+USER_STORE_PATH=/etc/nanoproxy/data.db
+ADMIN_COOKIE_SECURE=true
+ADMIN_ALLOWED_ORIGINS=https://admin.example.com
+go run .
+```
+
+Notes:
+
+- `CREDENTIALS` remain useful for bootstrap or emergency static users.
+- Admin-managed users are stored separately and reloaded automatically.
+- Both HTTP and SOCKS5 reuse the same in-memory authentication view, so behavior stays aligned across protocols.
+
+### Admin Security Notes
+
+- Admin state-changing actions use CSRF tokens.
+- CSRF tokens are rotated after successful state-changing actions.
+- Login attempts are rate-limited (`ADMIN_MAX_LOGIN_ATTEMPTS`, `ADMIN_LOGIN_WINDOW`, `ADMIN_LOCKOUT_DURATION`).
+- If `ADMIN_ALLOWED_ORIGINS` is configured, requests without allowed `Origin`/`Referer` are rejected.
 
 ## Logging
 

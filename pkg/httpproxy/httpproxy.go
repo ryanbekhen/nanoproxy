@@ -13,6 +13,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/ryanbekhen/nanoproxy/pkg/credential"
 	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
+	"github.com/ryanbekhen/nanoproxy/pkg/traffic"
 )
 
 var hopHeaders = []string{
@@ -34,6 +35,7 @@ type Config struct {
 	ClientConnTimeout time.Duration
 	Dial              func(network, addr string) (net.Conn, error)
 	Resolver          resolver.Resolver
+	Tracker           *traffic.Tracker
 }
 
 type Server struct {
@@ -73,37 +75,41 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) authenticateRequest(r *http.Request) bool {
+func (s *Server) authenticateRequest(r *http.Request) (string, bool) {
 	if s.config.Credentials == nil {
-		return true
+		return "anonymous", true
 	}
 
 	authHeader := r.Header.Get("Proxy-Authorization")
 	if authHeader == "" {
-		return false
+		return "", false
 	}
 
 	if strings.HasPrefix(authHeader, "Basic ") {
 		encodedCreds := strings.TrimPrefix(authHeader, "Basic ")
 		decoded, err := base64.StdEncoding.DecodeString(encodedCreds)
 		if err != nil {
-			return false
+			return "", false
 		}
 
 		parts := strings.SplitN(string(decoded), ":", 2)
 		if len(parts) != 2 {
-			return false
+			return "", false
 		}
 
 		username, password := parts[0], parts[1]
-		return s.config.Credentials.Valid(username, password)
+		if s.config.Credentials.Valid(username, password) {
+			return username, true
+		}
+		return "", false
 	}
 
-	return false
+	return "", false
 }
 
 func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
-	if !s.authenticateRequest(r) {
+	username, authenticated := s.authenticateRequest(r)
+	if !authenticated {
 		s.config.Logger.Error().
 			Str("client_addr", r.RemoteAddr).
 			Msg("Unauthorized CONNECT request")
@@ -111,6 +117,9 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Proxy authentication required or unauthorized", http.StatusProxyAuthRequired)
 		return
 	}
+	session := s.startSession(username, r.RemoteAddr)
+	defer session.Close()
+
 	startTime := time.Now()
 	serverConn, err := s.config.Dial("tcp", r.Host)
 	latency := time.Since(startTime).Milliseconds()
@@ -143,14 +152,21 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 		Str("latency", fmt.Sprintf("%dms", latency)).
 		Msg("CONNECT request completed")
 
+	uploadCh := make(chan struct{}, 1)
 	go func() {
-		_, _ = io.Copy(serverConn, clientConn)
+		n, _ := io.Copy(serverConn, clientConn)
+		session.AddUpload(n)
+		uploadCh <- struct{}{}
 	}()
-	_, _ = io.Copy(clientConn, serverConn)
+
+	n, _ := io.Copy(clientConn, serverConn)
+	session.AddDownload(n)
+	<-uploadCh
 }
 
 func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
-	if !s.authenticateRequest(r) {
+	username, authenticated := s.authenticateRequest(r)
+	if !authenticated {
 		s.config.Logger.Error().
 			Str("client_addr", r.RemoteAddr).
 			Msg("Unauthorized HTTP request")
@@ -158,6 +174,8 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Proxy authentication required or unauthorized", http.StatusProxyAuthRequired)
 		return
 	}
+	session := s.startSession(username, r.RemoteAddr)
+	defer session.Close()
 
 	startTime := time.Now()
 	clientIP := r.RemoteAddr
@@ -171,7 +189,13 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	proxyReq, err := http.NewRequest(r.Method, r.URL.String(), r.Body)
+	proxyReqBody := &countingReadCloser{
+		ReadCloser: r.Body,
+		onRead: func(n int64) {
+			session.AddUpload(n)
+		},
+	}
+	proxyReq, err := http.NewRequest(r.Method, r.URL.String(), proxyReqBody)
 	if err != nil {
 		latency := time.Since(startTime).Milliseconds()
 		s.config.Logger.Error().
@@ -226,7 +250,36 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
+	n, _ := io.Copy(w, resp.Body)
+	session.AddDownload(n)
+}
+
+func (s *Server) startSession(username, remoteAddr string) *traffic.Session {
+	if s.config.Tracker == nil {
+		return nil
+	}
+	return s.config.Tracker.Start(username, extractClientIP(remoteAddr))
+}
+
+func extractClientIP(remoteAddr string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return remoteAddr
+	}
+	return host
+}
+
+type countingReadCloser struct {
+	io.ReadCloser
+	onRead func(n int64)
+}
+
+func (c *countingReadCloser) Read(p []byte) (int, error) {
+	n, err := c.ReadCloser.Read(p)
+	if n > 0 && c.onRead != nil {
+		c.onRead(int64(n))
+	}
+	return n, err
 }
 
 func isHopHeader(header string) bool {

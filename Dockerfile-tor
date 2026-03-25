@@ -4,7 +4,7 @@ ARG TARGETPLATFORM
 RUN apk update && \
     apk add --no-cache tor supervisor
 
-RUN mkdir -p /var/log/supervisor
+RUN mkdir -p /var/log/supervisor /var/log/tor
 
 COPY $TARGETPLATFORM/nanoproxy /usr/bin
 COPY supervisord.conf /etc/supervisord.conf
@@ -14,7 +14,12 @@ RUN mkdir -p /etc/tor && \
 
 RUN mkdir -p /var/lib/tor
 
+RUN mkdir -p /etc/nanoproxy
+
+ENV USER_STORE_PATH=/etc/nanoproxy/data.db
+
 EXPOSE 1080
 EXPOSE 8080
+EXPOSE 9090
 
 ENTRYPOINT ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
