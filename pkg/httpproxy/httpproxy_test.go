@@ -117,7 +117,7 @@ func TestServer_ServeHTTP(t *testing.T) {
 		server.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusBadGateway, rr.Code)
-		assert.Contains(t, rr.Body.String(), "Bad gateway: failed to send request")
+		assert.Contains(t, rr.Body.String(), "Bad gateway: failed to resolve target host")
 	})
 }
 
@@ -293,7 +293,7 @@ func TestServer_HandleHTTP_InvalidURLScheme(t *testing.T) {
 		server.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusBadRequest, rr.Code)            // Memastikan statusnya Bad Request
-		assert.Contains(t, rr.Body.String(), "Invalid URL scheme") // Memastikan pesan error sesuai
+		assert.Contains(t, rr.Body.String(), "Invalid target URL") // Memastikan pesan error sesuai
 	})
 }
 
@@ -315,6 +315,6 @@ func TestServer_HandleHTTP_ClientDoError(t *testing.T) {
 		server.ServeHTTP(rr, proxyReq)
 
 		assert.Equal(t, http.StatusBadGateway, rr.Code)
-		assert.Contains(t, rr.Body.String(), "Bad gateway: failed to send request")
+		assert.Contains(t, rr.Body.String(), "Bad gateway: failed to resolve target host")
 	})
 }

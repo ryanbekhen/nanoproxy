@@ -145,7 +145,8 @@ func sendReply(conn io.Writer, reply uint8, addr *AddrSpec) error {
 		if len(addr.FQDN) > 255 {
 			return fmt.Errorf("fqdn too long for socks5 domain field: %d", len(addr.FQDN))
 		}
-		addrBody = append([]byte{byte(len(addr.FQDN))}, addr.FQDN...)
+		fqdnLen := uint8(len(addr.FQDN)) // bounds already checked above; uint8 cast is safe // #nosec G115
+		addrBody = append([]byte{fqdnLen}, addr.FQDN...)
 		if addr.Port < 0 || addr.Port > 65535 {
 			return fmt.Errorf("port value out of range uint16: %d", addr.Port)
 		}
