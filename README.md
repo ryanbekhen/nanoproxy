@@ -233,7 +233,7 @@ DNS_TIMEOUT=10s
 CREDENTIALS=username:passwordHash
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=change-me
-USER_STORE_PATH=/etc/nanoproxy/data.db
+USER_STORE_PATH=/var/lib/nanoproxy/data.db
 ADMIN_COOKIE_SECURE=true
 ADMIN_MAX_LOGIN_ATTEMPTS=5
 ADMIN_LOGIN_WINDOW=5m
@@ -310,7 +310,7 @@ ADDR_HTTP=:8080
 ADDR_ADMIN=:9090
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=change-me
-USER_STORE_PATH=/etc/nanoproxy/data.db
+USER_STORE_PATH=/var/lib/nanoproxy/data.db
 ADMIN_COOKIE_SECURE=true
 ADMIN_ALLOWED_ORIGINS=https://admin.example.com
 go run .

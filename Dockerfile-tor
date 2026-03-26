@@ -12,12 +12,12 @@ COPY supervisord.conf /etc/supervisord.conf
 RUN mkdir -p /etc/tor && \
     echo -e "ControlPort 9051\nCookieAuthentication 0" > /etc/tor/torrc
 
-RUN mkdir -p /var/lib/tor
+RUN mkdir -p /var/lib/tor /var/lib/nanoproxy
 
 
-ENV USER_STORE_PATH=/etc/nanoproxy/data.db
+ENV USER_STORE_PATH=/var/lib/nanoproxy/data.db
 
-VOLUME ["/etc/nanoproxy", "/var/lib/tor"]
+VOLUME ["/etc/nanoproxy", "/var/lib/tor", "/var/lib/nanoproxy"]
 
 EXPOSE 1080
 EXPOSE 8080
