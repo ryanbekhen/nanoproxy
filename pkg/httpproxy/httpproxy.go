@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -46,6 +47,12 @@ type Server struct {
 	config *Config
 }
 
+var (
+	ErrMissingProxyAuthorization = errors.New("missing proxy authorization header")
+	ErrInvalidProxyAuthorization = errors.New("invalid proxy authorization header")
+	ErrInvalidProxyCredentials   = errors.New("invalid credentials")
+)
+
 func New(conf *Config) *Server {
 	if conf.Logger == nil {
 		logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}).With().Timestamp().Logger()
@@ -79,44 +86,45 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) authenticateRequest(r *http.Request) (string, bool) {
+func (s *Server) authenticateRequest(r *http.Request) (string, error) {
 	if s.config.Credentials == nil {
-		return "anonymous", true
+		return "anonymous", nil
 	}
 
 	authHeader := r.Header.Get("Proxy-Authorization")
 	if authHeader == "" {
-		return "", false
+		return "", ErrMissingProxyAuthorization
 	}
 
 	if strings.HasPrefix(authHeader, "Basic ") {
 		encodedCreds := strings.TrimPrefix(authHeader, "Basic ")
 		decoded, err := base64.StdEncoding.DecodeString(encodedCreds)
 		if err != nil {
-			return "", false
+			return "", fmt.Errorf("%w: %v", ErrInvalidProxyAuthorization, err)
 		}
 
 		parts := strings.SplitN(string(decoded), ":", 2)
 		if len(parts) != 2 {
-			return "", false
+			return "", ErrInvalidProxyAuthorization
 		}
 
 		username, password := parts[0], parts[1]
 		if s.config.Credentials.Valid(username, password) {
-			return username, true
+			return username, nil
 		}
-		return "", false
+		return "", ErrInvalidProxyCredentials
 	}
 
-	return "", false
+	return "", ErrInvalidProxyAuthorization
 }
 
 func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
-	username, authenticated := s.authenticateRequest(r)
-	if !authenticated {
-		s.config.Logger.Error().
-			Str("client_addr", r.RemoteAddr).
-			Msg("Unauthorized CONNECT request")
+	requestLogger := s.requestLogger(r)
+	username, err := s.authenticateRequest(r)
+	if err != nil {
+		requestLogger.Error().
+			Err(err).
+			Msg("proxy authentication failed")
 		w.Header().Set("Proxy-Authenticate", "Basic realm=\"Restricted area\"")
 		http.Error(w, "Proxy authentication required or unauthorized", http.StatusProxyAuthRequired)
 		return
@@ -128,11 +136,11 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 	serverConn, err := s.config.Dial("tcp", r.Host)
 	latency := time.Since(startTime).Milliseconds()
 	if err != nil {
-		s.config.Logger.Error().
-			Str("client_addr", r.RemoteAddr).
+		requestLogger.Error().
 			Str("dest_addr", r.Host).
 			Str("latency", fmt.Sprintf("%dms", latency)).
-			Msg("CONNECT failed")
+			Err(err).
+			Msg("connect failed")
 		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
 		return
 	}
@@ -140,9 +148,9 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 	clientConn, _, err := w.(http.Hijacker).Hijack()
 	if err != nil {
-		s.config.Logger.Error().
-			Str("client_addr", r.RemoteAddr).
-			Msg("Failed to hijack client connection")
+		requestLogger.Error().
+			Err(err).
+			Msg("failed to hijack client connection")
 		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
 		return
 	}
@@ -163,11 +171,12 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
-	username, authenticated := s.authenticateRequest(r)
-	if !authenticated {
-		s.config.Logger.Error().
-			Str("client_addr", r.RemoteAddr).
-			Msg("Unauthorized HTTP request")
+	requestLogger := s.requestLogger(r)
+	username, err := s.authenticateRequest(r)
+	if err != nil {
+		requestLogger.Error().
+			Err(err).
+			Msg("proxy authentication failed")
 		w.Header().Set("Proxy-Authenticate", "Basic realm=\"Restricted area\"")
 		http.Error(w, "Proxy authentication required or unauthorized", http.StatusProxyAuthRequired)
 		return
@@ -176,14 +185,13 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	defer session.Close()
 
 	startTime := time.Now()
-	clientIP := r.RemoteAddr
 
 	targetURL, err := normalizeProxyTargetURL(r)
 	if err != nil {
-		s.config.Logger.Error().
-			Str("client_addr", clientIP).
+		requestLogger.Error().
 			Str("dest_addr", r.URL.String()).
-			Msg("Invalid proxy target URL")
+			Err(err).
+			Msg("invalid proxy target url")
 		http.Error(w, "Invalid target URL", http.StatusBadRequest)
 		return
 	}
@@ -198,11 +206,11 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	resolvedAddr, err := resolveProxyTargetAddr(targetURL, s.config.Resolver)
 	if err != nil {
 		latency := time.Since(startTime).Milliseconds()
-		s.config.Logger.Error().
-			Str("client_addr", clientIP).
+		requestLogger.Error().
 			Str("dest_addr", targetURL.String()).
 			Str("latency", fmt.Sprintf("%dms", latency)).
-			Msg("Failed to resolve target host")
+			Err(err).
+			Msg("failed to resolve target host")
 		http.Error(w, "Bad gateway: failed to resolve target host", http.StatusBadGateway)
 		return
 	}
@@ -210,11 +218,11 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	serverConn, err := dialProxyTarget(targetURL, resolvedAddr, s.config.Dial, s.config.ClientConnTimeout)
 	if err != nil {
 		latency := time.Since(startTime).Milliseconds()
-		s.config.Logger.Error().
-			Str("client_addr", clientIP).
+		requestLogger.Error().
 			Str("dest_addr", targetURL.String()).
 			Str("latency", fmt.Sprintf("%dms", latency)).
-			Msg("Failed to connect to target - Bad Gateway")
+			Err(err).
+			Msg("failed to connect to target")
 		http.Error(w, "Bad gateway: failed to send request", http.StatusBadGateway)
 		return
 	}
@@ -223,11 +231,11 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	proxyReq := buildOutboundProxyRequest(r, targetURL, proxyReqBody)
 	if err := proxyReq.Write(serverConn); err != nil {
 		latency := time.Since(startTime).Milliseconds()
-		s.config.Logger.Error().
-			Str("client_addr", clientIP).
+		requestLogger.Error().
 			Str("dest_addr", targetURL.String()).
 			Str("latency", fmt.Sprintf("%dms", latency)).
-			Msg("Failed to send request - Bad Gateway")
+			Err(err).
+			Msg("failed to send request")
 		http.Error(w, "Bad gateway: failed to send request", http.StatusBadGateway)
 		return
 	}
@@ -235,11 +243,11 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	resp, err := http.ReadResponse(bufio.NewReader(serverConn), proxyReq)
 	latency := time.Since(startTime).Milliseconds()
 	if err != nil {
-		s.config.Logger.Error().
-			Str("client_addr", clientIP).
+		requestLogger.Error().
 			Str("dest_addr", targetURL.String()).
 			Str("latency", fmt.Sprintf("%dms", latency)).
-			Msg("Failed to read response - Bad Gateway")
+			Err(err).
+			Msg("failed to read response")
 		http.Error(w, "Bad gateway: failed to read response", http.StatusBadGateway)
 		return
 	}
@@ -273,6 +281,17 @@ func extractClientIP(remoteAddr string) string {
 		return remoteAddr
 	}
 	return host
+}
+
+func (s *Server) requestLogger(r *http.Request) zerolog.Logger {
+	logger := s.config.Logger.With().Str("protocol", "http")
+	if r != nil {
+		logger = logger.Str("http_method", r.Method)
+		if r.RemoteAddr != "" {
+			logger = logger.Str("client_addr", r.RemoteAddr)
+		}
+	}
+	return logger.Logger()
 }
 
 func resolveProxyTargetAddr(targetURL *url.URL, res resolver.Resolver) (string, error) {

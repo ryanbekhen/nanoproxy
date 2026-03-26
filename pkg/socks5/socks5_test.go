@@ -3,6 +3,7 @@ package socks5
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/ryanbekhen/nanoproxy/pkg/credential"
 	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
 	"github.com/stretchr/testify/assert"
@@ -175,6 +177,155 @@ func TestListenAndServe_InvalidCredentials(t *testing.T) {
 	}
 
 	assert.Equal(t, expected, out)
+}
+
+func TestHandleConnection_LogsStructuredAuthFailure(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger := zerolog.New(&logBuf)
+	credentials := credential.NewStaticCredentialStore()
+	credentials.Add("foo", "bar")
+
+	server := New(&Config{
+		Authentication: []Authenticator{&UserPassAuthenticator{Credentials: credentials}},
+		Logger:         &logger,
+	})
+
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		server.handleConnection(serverConn)
+	}()
+
+	request := []byte{
+		Version,
+		1, UserPassAuth.Uint8(),
+		UserAuthVersion,
+		3, 'b', 'a', 'd',
+		4, 'p', 'a', 's', 's',
+	}
+	_, err := clientConn.Write(request)
+	assert.NoError(t, err)
+
+	response := make([]byte, 4)
+	_, err = io.ReadFull(clientConn, response)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte{Version, UserPassAuth.Uint8(), UserAuthVersion, AuthFailure.Uint8()}, response)
+
+	clientConn.Close()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for connection handler")
+	}
+
+	entry := map[string]interface{}{}
+	err = json.Unmarshal(bytes.TrimSpace(logBuf.Bytes()), &entry)
+	assert.NoError(t, err)
+	assert.Equal(t, "proxy authentication failed", entry["message"])
+	assert.Equal(t, "socks5", entry["protocol"])
+	assert.Equal(t, "invalid credentials", entry["error"])
+	assert.Equal(t, "error", entry["level"])
+	assert.NotEmpty(t, entry["client_addr"])
+}
+
+func TestHandleConnection_LogsClientAddrForUnsupportedVersion(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger := zerolog.New(&logBuf)
+	server := New(&Config{Logger: &logger})
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	assert.NoError(t, err)
+	defer listener.Close()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		conn, acceptErr := listener.Accept()
+		assert.NoError(t, acceptErr)
+		if acceptErr == nil {
+			server.handleConnection(conn)
+		}
+	}()
+
+	clientConn, err := net.Dial("tcp", listener.Addr().String())
+	assert.NoError(t, err)
+	_, err = clientConn.Write([]byte{0x04})
+	assert.NoError(t, err)
+	_ = clientConn.Close()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for connection handler")
+	}
+
+	entry := map[string]interface{}{}
+	err = json.Unmarshal(bytes.TrimSpace(logBuf.Bytes()), &entry)
+	assert.NoError(t, err)
+	assert.Equal(t, "unsupported version", entry["message"])
+	assert.Equal(t, "socks5", entry["protocol"])
+	assert.Equal(t, float64(4), entry["version"])
+	clientAddr, ok := entry["client_addr"].(string)
+	assert.True(t, ok)
+	assert.NotEmpty(t, clientAddr)
+	assert.Contains(t, clientAddr, "127.0.0.1:")
+}
+
+func TestHandleConnection_LogsRequestFailureContext(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger := zerolog.New(&logBuf)
+	server := New(&Config{
+		Authentication: []Authenticator{&NoAuthAuthenticator{}},
+		Logger:         &logger,
+	})
+
+	serverConn, clientConn := net.Pipe()
+	defer func() { _ = clientConn.Close() }()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		server.handleConnection(serverConn)
+	}()
+
+	request := []byte{
+		Version,
+		1, NoAuth.Uint8(),
+		Version,
+		9, // unsupported command
+		0,
+		AddressTypeIPv4.Uint8(),
+		127, 0, 0, 1,
+		0, 80,
+	}
+	_, err := clientConn.Write(request)
+	assert.NoError(t, err)
+
+	response := make([]byte, 12)
+	_, err = io.ReadFull(clientConn, response)
+	assert.NoError(t, err)
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for connection handler")
+	}
+
+	entry := map[string]interface{}{}
+	err = json.Unmarshal(bytes.TrimSpace(logBuf.Bytes()), &entry)
+	assert.NoError(t, err)
+	assert.Equal(t, "request failed", entry["message"])
+	assert.Equal(t, "socks5", entry["protocol"])
+	assert.Equal(t, "unknown", entry["command"])
+	assert.Equal(t, "127.0.0.1:80", entry["dest_addr"])
+	assert.Equal(t, "unsupported command: 9", entry["error"])
+	assert.Equal(t, "error", entry["level"])
+	clientAddr, ok := entry["client_addr"].(string)
+	assert.True(t, ok)
+	assert.NotEmpty(t, clientAddr)
 }
 
 func TestListenAndServe_InvalidAuthType(t *testing.T) {

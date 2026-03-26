@@ -107,16 +107,17 @@ func (s *Server) serve(l net.Listener) error {
 }
 
 func (s *Server) handleConnection(conn net.Conn) {
+	connLogger := s.connectionLogger(conn)
 	defer func(conn net.Conn) {
 		if err := conn.Close(); err != nil {
-			s.config.Logger.Error().Err(err).Msg("failed to close connection")
+			connLogger.Error().Err(err).Msg("failed to close connection")
 		}
 	}(conn)
 	connectionBuffer := bufio.NewReader(conn)
 
 	// Set a deadline for the connection
 	if err := conn.SetDeadline(time.Now().Add(s.config.ClientConnTimeout)); err != nil {
-		s.config.Logger.Err(err).Msg("failed to set connection deadline")
+		connLogger.Error().Err(err).Msg("failed to set connection deadline")
 		return
 	}
 
@@ -124,14 +125,14 @@ func (s *Server) handleConnection(conn net.Conn) {
 	version := []byte{0}
 	if _, err := connectionBuffer.Read(version); err != nil {
 		if shouldLogRequestError(err) {
-			s.config.Logger.Err(err).Msg("failed to read version byte")
+			connLogger.Error().Err(err).Msg("failed to read version byte")
 		}
 		return
 	}
 
 	// Ensure we are compatible
 	if version[0] != Version {
-		s.config.Logger.Error().Msg("unsupported version")
+		connLogger.Error().Uint8("version", version[0]).Msg("unsupported version")
 		return
 	}
 
@@ -139,7 +140,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	authContext, err := s.authenticate(conn, connectionBuffer)
 	if err != nil {
 		if shouldLogRequestError(err) {
-			s.config.Logger.Err(err).Msg("SOCKS5 authentication failed")
+			connLogger.Error().Err(err).Msg("proxy authentication failed")
 		}
 		return
 	}
@@ -149,13 +150,13 @@ func (s *Server) handleConnection(conn net.Conn) {
 		if errors.Is(err, ErrUnrecognizedAddrType) {
 			if err := sendReply(conn, StatusAddressNotSupported.Uint8(), nil); err != nil {
 				if shouldLogRequestError(err) {
-					s.config.Logger.Err(err).Msg("failed to send reply")
+					connLogger.Error().Err(err).Msg("failed to send reply")
 				}
 				return
 			}
 		}
 		if shouldLogRequestError(err) {
-			s.config.Logger.Err(err).Msg("failed to create request")
+			connLogger.Error().Err(err).Msg("failed to create request")
 		}
 		return
 	}
@@ -169,7 +170,10 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	if err := s.handleRequest(request, conn, trafficSession); err != nil &&
 		shouldLogRequestError(err) {
-		s.config.Logger.Err(err).
+		connLogger.Error().
+			Str("command", request.Command.String()).
+			Str("dest_addr", request.DestAddr.String()).
+			Err(err).
 			Msg("request failed")
 	}
 
@@ -303,6 +307,21 @@ func extractClientIP(remoteAddr string) string {
 		return remoteAddr
 	}
 	return host
+}
+
+func (s *Server) connectionLogger(conn net.Conn) zerolog.Logger {
+	logger := s.config.Logger.With().Str("protocol", "socks5")
+	if clientAddr := remoteAddrString(conn); clientAddr != "" {
+		logger = logger.Str("client_addr", clientAddr)
+	}
+	return logger.Logger()
+}
+
+func remoteAddrString(conn net.Conn) string {
+	if conn == nil || conn.RemoteAddr() == nil {
+		return ""
+	}
+	return conn.RemoteAddr().String()
 }
 
 func shouldLogRequestError(err error) bool {

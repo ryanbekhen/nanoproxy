@@ -2,6 +2,7 @@ package httpproxy
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -82,6 +83,22 @@ func (m *MockHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	mockConn := &MockNetConn{}
 	buf := bufio.NewReadWriter(bufio.NewReader(mockConn), bufio.NewWriter(mockConn))
 	return mockConn, buf, nil
+}
+
+func parseJSONLogLine(t *testing.T, buf *bytes.Buffer) map[string]interface{} {
+	t.Helper()
+
+	line := strings.TrimSpace(buf.String())
+	if line == "" {
+		t.Fatal("expected log output")
+	}
+
+	entry := map[string]interface{}{}
+	if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		t.Fatalf("failed to parse log entry: %v", err)
+	}
+
+	return entry
 }
 
 func TestServer_ServeHTTP(t *testing.T) {
@@ -184,6 +201,85 @@ func TestServer_HandleCONNECT(t *testing.T) {
 			t.Fatal("Test timeout after 5 seconds")
 		}
 	})
+}
+
+func TestServer_HandleCONNECT_LogsStructuredAuthFailure(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger := zerolog.New(&logBuf)
+	server := New(&Config{
+		Credentials: &MockCredentialStore{},
+		Logger:      &logger,
+	})
+
+	req := httptest.NewRequest(http.MethodConnect, "http://example.com", nil)
+	req.RemoteAddr = "202.65.229.173:50059"
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusProxyAuthRequired, rr.Code)
+	entry := parseJSONLogLine(t, &logBuf)
+	assert.Equal(t, "proxy authentication failed", entry["message"])
+	assert.Equal(t, "http", entry["protocol"])
+	assert.Equal(t, http.MethodConnect, entry["http_method"])
+	assert.Equal(t, "202.65.229.173:50059", entry["client_addr"])
+	assert.Equal(t, ErrMissingProxyAuthorization.Error(), entry["error"])
+	assert.Equal(t, "error", entry["level"])
+}
+
+func TestServer_HandleHTTP_LogsStructuredAuthFailure(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger := zerolog.New(&logBuf)
+	server := New(&Config{
+		Credentials: &MockCredentialStore{},
+		Logger:      &logger,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	req.RemoteAddr = "202.65.229.173:51655"
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusProxyAuthRequired, rr.Code)
+	entry := parseJSONLogLine(t, &logBuf)
+	assert.Equal(t, "proxy authentication failed", entry["message"])
+	assert.Equal(t, "http", entry["protocol"])
+	assert.Equal(t, http.MethodGet, entry["http_method"])
+	assert.Equal(t, "202.65.229.173:51655", entry["client_addr"])
+	assert.Equal(t, ErrMissingProxyAuthorization.Error(), entry["error"])
+	assert.Equal(t, "error", entry["level"])
+}
+
+func TestServer_HandleCONNECT_LogsStructuredDialFailure(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger := zerolog.New(&logBuf)
+	server := New(&Config{
+		Credentials: &MockCredentialStore{},
+		Logger:      &logger,
+		Dial: func(network, addr string) (net.Conn, error) {
+			return nil, errors.New("dial failed")
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodConnect, "http://example.com", nil)
+	req.Host = "example.com:443"
+	req.RemoteAddr = "202.65.229.173:50059"
+	req.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("user:password")))
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
+	entry := parseJSONLogLine(t, &logBuf)
+	assert.Equal(t, "connect failed", entry["message"])
+	assert.Equal(t, "http", entry["protocol"])
+	assert.Equal(t, http.MethodConnect, entry["http_method"])
+	assert.Equal(t, "202.65.229.173:50059", entry["client_addr"])
+	assert.Equal(t, "example.com:443", entry["dest_addr"])
+	assert.Equal(t, "dial failed", entry["error"])
+	assert.NotEmpty(t, entry["latency"])
+	assert.Equal(t, "error", entry["level"])
 }
 
 func TestProxy_ForwardRequests(t *testing.T) {
