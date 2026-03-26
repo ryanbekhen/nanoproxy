@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -121,7 +123,9 @@ func (s *Server) handleConnection(conn net.Conn) {
 	// Read the version byte
 	version := []byte{0}
 	if _, err := connectionBuffer.Read(version); err != nil {
-		s.config.Logger.Err(err).Msg("failed to read version byte")
+		if shouldLogRequestError(err) {
+			s.config.Logger.Err(err).Msg("failed to read version byte")
+		}
 		return
 	}
 
@@ -134,7 +138,9 @@ func (s *Server) handleConnection(conn net.Conn) {
 	// Authenticate
 	authContext, err := s.authenticate(conn, connectionBuffer)
 	if err != nil {
-		s.config.Logger.Err(err).Msg("SOCKS5 authentication failed")
+		if shouldLogRequestError(err) {
+			s.config.Logger.Err(err).Msg("SOCKS5 authentication failed")
+		}
 		return
 	}
 
@@ -142,11 +148,15 @@ func (s *Server) handleConnection(conn net.Conn) {
 	if err != nil {
 		if errors.Is(err, ErrUnrecognizedAddrType) {
 			if err := sendReply(conn, StatusAddressNotSupported.Uint8(), nil); err != nil {
-				s.config.Logger.Err(err).Msg("failed to send reply")
+				if shouldLogRequestError(err) {
+					s.config.Logger.Err(err).Msg("failed to send reply")
+				}
 				return
 			}
 		}
-		s.config.Logger.Err(err).Msg("failed to create request")
+		if shouldLogRequestError(err) {
+			s.config.Logger.Err(err).Msg("failed to create request")
+		}
 		return
 	}
 	request.AuthContext = authContext
@@ -158,11 +168,11 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 
 	if err := s.handleRequest(request, conn, trafficSession); err != nil &&
-		!strings.Contains(err.Error(), "i/o timeout") {
+		shouldLogRequestError(err) {
 		s.config.Logger.Err(err).
 			Msg("request failed")
 	} else {
-		s.config.Logger.Info().
+		s.config.Logger.Debug().
 			Str("client_addr", conn.RemoteAddr().String()).
 			Str("dest_addr", request.DestAddr.String()).
 			Str("latency", request.Latency.String()).
@@ -198,7 +208,7 @@ func (s *Server) handleRequest(req *Request, conn net.Conn, trafficSession *traf
 		addr, err := s.config.Resolver.Resolve(dest.FQDN)
 		if err != nil {
 			if err := sendReply(conn, StatusHostUnreachable.Uint8(), nil); err != nil {
-				return ErrFailedToSendReply
+				return fmt.Errorf("%w: %w", ErrFailedToSendReply, err)
 			}
 			return fmt.Errorf("failed to resolve destination: %w", err)
 		}
@@ -220,7 +230,7 @@ func (s *Server) handleRequest(req *Request, conn net.Conn, trafficSession *traf
 	//	return s.handleAssociate(conn, req)
 	default:
 		if err := sendReply(conn, StatusCommandNotSupported.Uint8(), nil); err != nil {
-			return ErrFailedToSendReply
+			return fmt.Errorf("%w: %w", ErrFailedToSendReply, err)
 		}
 		return fmt.Errorf("unsupported command: %d", req.Command)
 	}
@@ -252,7 +262,7 @@ func (s *Server) handleConnect(conn net.Conn, req *Request, trafficSession *traf
 		}
 
 		if err := sendReply(conn, resp.Uint8(), nil); err != nil {
-			return ErrFailedToSendReply
+			return fmt.Errorf("%w: %w", ErrFailedToSendReply, err)
 		}
 
 		return errors.New(msg)
@@ -264,7 +274,7 @@ func (s *Server) handleConnect(conn net.Conn, req *Request, trafficSession *traf
 	local := dest.LocalAddr().(*net.TCPAddr)
 	bind := AddrSpec{IP: local.IP, Port: local.Port}
 	if err := sendReply(conn, StatusRequestGranted.Uint8(), &bind); err != nil {
-		return ErrFailedToSendReply
+		return fmt.Errorf("%w: %w", ErrFailedToSendReply, err)
 	}
 
 	errChan := make(chan error, 2)
@@ -299,4 +309,31 @@ func extractClientIP(remoteAddr string) string {
 		return remoteAddr
 	}
 	return host
+}
+
+func shouldLogRequestError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
+		return false
+	}
+	if errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.EPIPE) ||
+		errors.Is(err, syscall.ETIMEDOUT) {
+		return false
+	}
+
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "i/o timeout") ||
+		strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "connection reset by peer") ||
+		strings.Contains(msg, "use of closed network connection") ||
+		strings.Contains(msg, "splice:") ||
+		strings.Contains(msg, "readfrom tcp") ||
+		strings.Contains(msg, "writeto tcp") {
+		return false
+	}
+
+	return true
 }

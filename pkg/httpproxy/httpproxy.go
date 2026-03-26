@@ -150,7 +150,7 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 	_, _ = clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
 
-	s.config.Logger.Info().
+	s.config.Logger.Debug().
 		Str("client_addr", r.RemoteAddr).
 		Str("dest_addr", r.Host).
 		Str("latency", fmt.Sprintf("%dms", latency)).
@@ -251,7 +251,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	s.config.Logger.Info().
+	s.config.Logger.Debug().
 		Str("client_addr", clientIP).
 		Str("dest_addr", targetURL.String()).
 		Str("latency", fmt.Sprintf("%dms", latency)).
