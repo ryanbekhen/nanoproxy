@@ -6,6 +6,8 @@ RUN mkdir -p /etc/nanoproxy
 
 ENV USER_STORE_PATH=/etc/nanoproxy/data.db
 
+VOLUME ["/etc/nanoproxy"]
+
 EXPOSE 1080
 EXPOSE 8080
 EXPOSE 9090
