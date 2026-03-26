@@ -171,12 +171,6 @@ func (s *Server) handleConnection(conn net.Conn) {
 		shouldLogRequestError(err) {
 		s.config.Logger.Err(err).
 			Msg("request failed")
-	} else {
-		s.config.Logger.Debug().
-			Str("client_addr", conn.RemoteAddr().String()).
-			Str("dest_addr", request.DestAddr.String()).
-			Str("latency", request.Latency.String()).
-			Msg("SOCKS5 request completed")
 	}
 
 	if s.config.AfterRequest != nil {

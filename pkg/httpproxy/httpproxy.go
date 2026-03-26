@@ -150,12 +150,6 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 	_, _ = clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
 
-	s.config.Logger.Debug().
-		Str("client_addr", r.RemoteAddr).
-		Str("dest_addr", r.Host).
-		Str("latency", fmt.Sprintf("%dms", latency)).
-		Msg("CONNECT request completed")
-
 	uploadCh := make(chan struct{}, 1)
 	go func() {
 		n, _ := io.Copy(serverConn, clientConn)
@@ -250,12 +244,6 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-
-	s.config.Logger.Debug().
-		Str("client_addr", clientIP).
-		Str("dest_addr", targetURL.String()).
-		Str("latency", fmt.Sprintf("%dms", latency)).
-		Msg("HTTP request successfully proxied")
 
 	for _, key := range hopHeaders {
 		resp.Header.Del(key)

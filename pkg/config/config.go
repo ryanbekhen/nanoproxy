@@ -4,6 +4,7 @@ import "time"
 
 type Config struct {
 	Timezone              string        `env:"TZ" envDefault:"Local"`
+	LogLevel              string        `env:"LOG_LEVEL" envDefault:"info"`
 	Network               string        `env:"NETWORK" envDefault:"tcp"`
 	ADDR                  string        `env:"ADDR" envDefault:":1080"`
 	ADDRHttp              string        `env:"ADDR_HTTP" envDefault:":8080"`

@@ -31,6 +31,14 @@ func main() {
 		logger.Fatal().Msg(err.Error())
 	}
 
+	level, err := zerolog.ParseLevel(strings.ToLower(strings.TrimSpace(cfg.LogLevel)))
+	if err != nil {
+		logger.Warn().Str("log_level", cfg.LogLevel).Msg("Invalid LOG_LEVEL, falling back to info")
+		level = zerolog.InfoLevel
+	}
+	zerolog.SetGlobalLevel(level)
+	logger = logger.Level(level)
+
 	loc, _ := time.LoadLocation(cfg.Timezone)
 	if loc != nil {
 		time.Local = loc
