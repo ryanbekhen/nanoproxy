@@ -53,7 +53,6 @@ Validate configuration values after parsing.
 type Config struct {
 SOCKS5Addr      string   `env:"SOCKS5_ADDR" envDefault:"0.0.0.0:1080"`
 HTTPProxyAddr   string   `env:"HTTP_PROXY_ADDR" envDefault:"0.0.0.0:8080"`
-Credentials     []string `env:"CREDENTIALS"`
 TOREnabled      bool     `env:"TOR_ENABLED" envDefault:"false"`
 TORControlAddr  string   `env:"TOR_CONTROLLER_ADDR" envDefault:"127.0.0.1:9051"`
 Timezone        string   `env:"TIMEZONE" envDefault:"UTC"`
@@ -136,7 +135,7 @@ logger.Fatal().Err(err).Msg("failed to start SOCKS5 server")
 
 ## Related skills
 
-- Credential Management - Handling credentials in config
+- Credential Management - Handling persisted proxy users and admin-auth flows
 - Docker Deployment - Passing config via environment
 - SOCKS5 Protocol - Using config in SOCKS5 setup
 - HTTP Proxy - Using config in HTTP proxy setup

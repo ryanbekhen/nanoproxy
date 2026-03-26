@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NanoProxy Admin Login</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-950 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 flex items-center justify-center p-4 text-slate-100">
+<div class="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-7 shadow-2xl backdrop-blur">
+    <p class="mb-1 text-xs uppercase tracking-[0.25em] text-slate-300">NanoProxy</p>
+    <h1 class="mb-5 text-2xl font-semibold">Admin Console</h1>
+    {{if .Error}}
+        <div class="mb-4 rounded-lg border border-rose-300/40 bg-rose-500/10 p-3 text-sm text-rose-200">{{.Error}}</div>
+    {{end}}
+    <form method="post" action="/admin/login" class="space-y-4">
+        <div>
+            <label for="username" class="mb-1 block text-sm text-slate-200">Username</label>
+            <input id="username" name="username" type="text" autocomplete="username" required
+                   class="w-full rounded-lg border border-white/15 bg-slate-900/60 p-2.5 text-slate-100 outline-none ring-0 placeholder:text-slate-400 focus:border-cyan-300">
+        </div>
+        <div>
+            <label for="password" class="mb-1 block text-sm text-slate-200">Password</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required
+                   class="w-full rounded-lg border border-white/15 bg-slate-900/60 p-2.5 text-slate-100 outline-none ring-0 placeholder:text-slate-400 focus:border-cyan-300">
+        </div>
+        <button type="submit"
+                class="w-full rounded-lg bg-cyan-400 px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-cyan-300">
+            Sign in
+        </button>
+    </form>
+</div>
+</body>
+</html>
+

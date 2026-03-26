@@ -4,14 +4,17 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/ryanbekhen/nanoproxy/pkg/credential"
 	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
+	"github.com/ryanbekhen/nanoproxy/pkg/traffic"
 )
 
 type Config struct {
@@ -24,6 +27,7 @@ type Config struct {
 	AfterRequest      func(req *Request, conn net.Conn)
 	Resolver          resolver.Resolver
 	Rewriter          AddressRewriter
+	Tracker           *traffic.Tracker
 }
 
 type Server struct {
@@ -103,66 +107,90 @@ func (s *Server) serve(l net.Listener) error {
 }
 
 func (s *Server) handleConnection(conn net.Conn) {
+	connLogger := s.connectionLogger(conn)
 	defer func(conn net.Conn) {
 		if err := conn.Close(); err != nil {
-			s.config.Logger.Error().Err(err).Msg("failed to close connection")
+			connLogger.Error().Err(err).Msg("failed to close connection")
 		}
 	}(conn)
 	connectionBuffer := bufio.NewReader(conn)
 
 	// Set a deadline for the connection
 	if err := conn.SetDeadline(time.Now().Add(s.config.ClientConnTimeout)); err != nil {
-		s.config.Logger.Err(err).Msg("failed to set connection deadline")
+		connLogger.Error().Err(err).Msg("failed to set connection deadline")
 		return
 	}
 
 	// Read the version byte
 	version := []byte{0}
 	if _, err := connectionBuffer.Read(version); err != nil {
-		s.config.Logger.Err(err).Msg("failed to read version byte")
+		if shouldLogRequestError(err) {
+			connLogger.Error().Err(err).Msg("failed to read version byte")
+		}
 		return
 	}
 
 	// Ensure we are compatible
 	if version[0] != Version {
-		s.config.Logger.Error().Msg("unsupported version")
+		connLogger.Error().Uint8("version", version[0]).Msg("unsupported version")
 		return
 	}
 
 	// Authenticate
 	authContext, err := s.authenticate(conn, connectionBuffer)
 	if err != nil {
-		s.config.Logger.Err(err).Msg("SOCKS5 authentication failed")
+		if shouldLogRequestError(err) {
+			connLogger.Error().Err(err).Msg("proxy authentication failed")
+		}
 		return
+	}
+	username := usernameFromAuthContext(authContext)
+	connLogger = connLogger.With().Str("username", username).Logger()
+	if s.config.Credentials != nil {
+		connLogger.Debug().Msg("proxy authentication succeeded")
+	} else {
+		connLogger.Debug().Msg("connection accepted without authentication")
 	}
 
 	request, err := NewRequest(connectionBuffer)
 	if err != nil {
 		if errors.Is(err, ErrUnrecognizedAddrType) {
 			if err := sendReply(conn, StatusAddressNotSupported.Uint8(), nil); err != nil {
-				s.config.Logger.Err(err).Msg("failed to send reply")
+				if shouldLogRequestError(err) {
+					connLogger.Error().Err(err).Msg("failed to send reply")
+				}
 				return
 			}
 		}
-		s.config.Logger.Err(err).Msg("failed to create request")
+		if shouldLogRequestError(err) {
+			connLogger.Error().Err(err).Msg("failed to create request")
+		}
 		return
 	}
 	request.AuthContext = authContext
+	requestLogger := connLogger.With().
+		Str("command", request.Command.String()).
+		Str("dest_addr", request.DestAddr.String()).
+		Logger()
+	requestLogger.Debug().Msg("request received")
+	trafficSession := s.startTrafficSession(authContext, conn)
+	defer trafficSession.Close()
 
 	if clientAddr, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
 		request.RemoteAddr = &AddrSpec{IP: clientAddr.IP, Port: clientAddr.Port}
 	}
 
-	if err := s.handleRequest(request, conn); err != nil &&
-		!strings.Contains(err.Error(), "i/o timeout") {
-		s.config.Logger.Err(err).
+	if err := s.handleRequest(request, conn, trafficSession, requestLogger); err != nil &&
+		shouldLogRequestError(err) {
+		requestLogger.Error().
+			Err(err).
 			Msg("request failed")
-	} else {
-		s.config.Logger.Info().
-			Str("client_addr", conn.RemoteAddr().String()).
-			Str("dest_addr", request.DestAddr.String()).
-			Str("latency", request.Latency.String()).
-			Msg("SOCKS5 request completed")
+	} else if err == nil {
+		requestLogger.Info().
+			Str("latency", request.Latency.Round(time.Millisecond).String()).
+			Uint64("upload_bytes", trafficSession.UploadBytes()).
+			Uint64("download_bytes", trafficSession.DownloadBytes()).
+			Msg("request completed")
 	}
 
 	if s.config.AfterRequest != nil {
@@ -188,17 +216,18 @@ func (s *Server) authenticate(conn net.Conn, bufConn *bufio.Reader) (*Context, e
 	return nil, noAcceptable(conn)
 }
 
-func (s *Server) handleRequest(req *Request, conn net.Conn) error {
+func (s *Server) handleRequest(req *Request, conn net.Conn, trafficSession *traffic.Session, requestLogger zerolog.Logger) error {
 	dest := req.DestAddr
 	if dest.FQDN != "" {
 		addr, err := s.config.Resolver.Resolve(dest.FQDN)
 		if err != nil {
 			if err := sendReply(conn, StatusHostUnreachable.Uint8(), nil); err != nil {
-				return ErrFailedToSendReply
+				return fmt.Errorf("%w: %w", ErrFailedToSendReply, err)
 			}
 			return fmt.Errorf("failed to resolve destination: %w", err)
 		}
 		dest.IP = addr
+		requestLogger.Debug().Str("resolved_ip", addr.String()).Msg("resolved destination address")
 	}
 
 	req.realAddr = req.DestAddr
@@ -208,7 +237,7 @@ func (s *Server) handleRequest(req *Request, conn net.Conn) error {
 
 	switch req.Command {
 	case CommandConnect:
-		return s.handleConnect(conn, req)
+		return s.handleConnect(conn, req, trafficSession, requestLogger)
 	// TODO: Implement these
 	//case CommandBind:
 	//	return s.handleBind(conn, req)
@@ -216,13 +245,13 @@ func (s *Server) handleRequest(req *Request, conn net.Conn) error {
 	//	return s.handleAssociate(conn, req)
 	default:
 		if err := sendReply(conn, StatusCommandNotSupported.Uint8(), nil); err != nil {
-			return ErrFailedToSendReply
+			return fmt.Errorf("%w: %w", ErrFailedToSendReply, err)
 		}
 		return fmt.Errorf("unsupported command: %d", req.Command)
 	}
 }
 
-func (s *Server) handleConnect(conn net.Conn, req *Request) error {
+func (s *Server) handleConnect(conn net.Conn, req *Request, trafficSession *traffic.Session, requestLogger zerolog.Logger) error {
 	dial := s.config.Dial
 	if dial == nil {
 		dial = func(network, addr string) (net.Conn, error) {
@@ -231,6 +260,7 @@ func (s *Server) handleConnect(conn net.Conn, req *Request) error {
 	}
 
 	processStartTimestamp := time.Now()
+	requestLogger.Debug().Msg("dialing destination")
 	dest, err := dial("tcp", req.realAddr.Address())
 	req.Latency = time.Since(processStartTimestamp)
 
@@ -248,7 +278,7 @@ func (s *Server) handleConnect(conn net.Conn, req *Request) error {
 		}
 
 		if err := sendReply(conn, resp.Uint8(), nil); err != nil {
-			return ErrFailedToSendReply
+			return fmt.Errorf("%w: %w", ErrFailedToSendReply, err)
 		}
 
 		return errors.New(msg)
@@ -260,12 +290,12 @@ func (s *Server) handleConnect(conn net.Conn, req *Request) error {
 	local := dest.LocalAddr().(*net.TCPAddr)
 	bind := AddrSpec{IP: local.IP, Port: local.Port}
 	if err := sendReply(conn, StatusRequestGranted.Uint8(), &bind); err != nil {
-		return ErrFailedToSendReply
+		return fmt.Errorf("%w: %w", ErrFailedToSendReply, err)
 	}
 
 	errChan := make(chan error, 2)
-	go relay(dest, req.BufferConn, errChan)
-	go relay(conn, dest, errChan)
+	go relayWithCount(dest, req.BufferConn, errChan, trafficSession.AddUpload)
+	go relayWithCount(conn, dest, errChan, trafficSession.AddDownload)
 
 	for i := 0; i < 2; i++ {
 		if err := <-errChan; err != nil {
@@ -274,4 +304,76 @@ func (s *Server) handleConnect(conn net.Conn, req *Request) error {
 	}
 
 	return nil
+}
+
+func (s *Server) startTrafficSession(authContext *Context, conn net.Conn) *traffic.Session {
+	if s.config.Tracker == nil {
+		return nil
+	}
+	username := "anonymous"
+	if authContext != nil && authContext.Payload != nil {
+		if v := authContext.Payload["Username"]; v != "" {
+			username = v
+		}
+	}
+	return s.config.Tracker.Start(username, extractClientIP(conn.RemoteAddr().String()))
+}
+
+func extractClientIP(remoteAddr string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return remoteAddr
+	}
+	return host
+}
+
+func (s *Server) connectionLogger(conn net.Conn) zerolog.Logger {
+	logger := s.config.Logger.With().Str("protocol", "socks5")
+	if clientAddr := remoteAddrString(conn); clientAddr != "" {
+		logger = logger.Str("client_addr", clientAddr)
+	}
+	return logger.Logger()
+}
+
+func remoteAddrString(conn net.Conn) string {
+	if conn == nil || conn.RemoteAddr() == nil {
+		return ""
+	}
+	return conn.RemoteAddr().String()
+}
+
+func usernameFromAuthContext(authContext *Context) string {
+	if authContext != nil && authContext.Payload != nil {
+		if username := authContext.Payload["Username"]; username != "" {
+			return username
+		}
+	}
+	return "anonymous"
+}
+
+func shouldLogRequestError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
+		return false
+	}
+	if errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.EPIPE) ||
+		errors.Is(err, syscall.ETIMEDOUT) {
+		return false
+	}
+
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "i/o timeout") ||
+		strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "connection reset by peer") ||
+		strings.Contains(msg, "use of closed network connection") ||
+		strings.Contains(msg, "splice:") ||
+		strings.Contains(msg, "readfrom tcp") ||
+		strings.Contains(msg, "writeto tcp") {
+		return false
+	}
+
+	return true
 }

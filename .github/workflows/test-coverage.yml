@@ -32,7 +32,7 @@ jobs:
           unset GOCOVERDIR
           go version
           go tool -n covdata || true
-          go test ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./...
+          go test ./... -coverprofile=./cover.out -covermode=atomic
 
       - name: Check Test Coverage
         id: coverage

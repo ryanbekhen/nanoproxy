@@ -2,6 +2,7 @@ package httpproxy
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -10,10 +11,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/ryanbekhen/nanoproxy/pkg/traffic"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -36,6 +39,12 @@ func (m *MockResolver) Resolve(host string) (net.IP, error) {
 	return nil, errors.New("host not found")
 }
 
+type resolverFunc func(host string) (net.IP, error)
+
+func (f resolverFunc) Resolve(host string) (net.IP, error) {
+	return f(host)
+}
+
 type MockNetConn struct{}
 
 func (m *MockNetConn) Read(b []byte) (n int, err error) {
@@ -56,6 +65,17 @@ func (m *MockNetConn) SetDeadline(t time.Time) error      { return nil }
 func (m *MockNetConn) SetReadDeadline(t time.Time) error  { return nil }
 func (m *MockNetConn) SetWriteDeadline(t time.Time) error { return nil }
 
+type writeFailConn struct{}
+
+func (c *writeFailConn) Read(_ []byte) (int, error)         { return 0, io.EOF }
+func (c *writeFailConn) Write(_ []byte) (int, error)        { return 0, errors.New("write failed") }
+func (c *writeFailConn) Close() error                       { return nil }
+func (c *writeFailConn) LocalAddr() net.Addr                { return nil }
+func (c *writeFailConn) RemoteAddr() net.Addr               { return nil }
+func (c *writeFailConn) SetDeadline(_ time.Time) error      { return nil }
+func (c *writeFailConn) SetReadDeadline(_ time.Time) error  { return nil }
+func (c *writeFailConn) SetWriteDeadline(_ time.Time) error { return nil }
+
 type MockHijacker struct {
 	*httptest.ResponseRecorder
 }
@@ -64,6 +84,43 @@ func (m *MockHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	mockConn := &MockNetConn{}
 	buf := bufio.NewReadWriter(bufio.NewReader(mockConn), bufio.NewWriter(mockConn))
 	return mockConn, buf, nil
+}
+
+func parseJSONLogLine(t *testing.T, buf *bytes.Buffer) map[string]interface{} {
+	t.Helper()
+
+	entries := parseJSONLogLines(t, buf)
+	if len(entries) == 0 {
+		t.Fatal("expected log output")
+	}
+
+	return entries[len(entries)-1]
+}
+
+func parseJSONLogLines(t *testing.T, buf *bytes.Buffer) []map[string]interface{} {
+	t.Helper()
+
+	content := strings.TrimSpace(buf.String())
+	if content == "" {
+		return nil
+	}
+
+	lines := strings.Split(content, "\n")
+	entries := make([]map[string]interface{}, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		entry := map[string]interface{}{}
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatalf("failed to parse log entry: %v", err)
+		}
+		entries = append(entries, entry)
+	}
+
+	return entries
 }
 
 func TestServer_ServeHTTP(t *testing.T) {
@@ -117,7 +174,7 @@ func TestServer_ServeHTTP(t *testing.T) {
 		server.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusBadGateway, rr.Code)
-		assert.Contains(t, rr.Body.String(), "Bad gateway: failed to send request")
+		assert.Contains(t, rr.Body.String(), "Bad gateway: failed to resolve target host")
 	})
 }
 
@@ -166,6 +223,158 @@ func TestServer_HandleCONNECT(t *testing.T) {
 			t.Fatal("Test timeout after 5 seconds")
 		}
 	})
+}
+
+func TestServer_HandleCONNECT_LogsStructuredAuthFailure(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger := zerolog.New(&logBuf)
+	server := New(&Config{
+		Credentials: &MockCredentialStore{},
+		Logger:      &logger,
+	})
+
+	req := httptest.NewRequest(http.MethodConnect, "http://example.com", nil)
+	req.RemoteAddr = "202.65.229.173:50059"
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusProxyAuthRequired, rr.Code)
+	entry := parseJSONLogLine(t, &logBuf)
+	assert.Equal(t, "proxy authentication failed", entry["message"])
+	assert.Equal(t, "http", entry["protocol"])
+	assert.Equal(t, http.MethodConnect, entry["http_method"])
+	assert.Equal(t, "202.65.229.173:50059", entry["client_addr"])
+	assert.Equal(t, ErrMissingProxyAuthorization.Error(), entry["error"])
+	assert.Equal(t, "error", entry["level"])
+}
+
+func TestServer_HandleHTTP_LogsStructuredAuthFailure(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger := zerolog.New(&logBuf)
+	server := New(&Config{
+		Credentials: &MockCredentialStore{},
+		Logger:      &logger,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	req.RemoteAddr = "202.65.229.173:51655"
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusProxyAuthRequired, rr.Code)
+	entry := parseJSONLogLine(t, &logBuf)
+	assert.Equal(t, "proxy authentication failed", entry["message"])
+	assert.Equal(t, "http", entry["protocol"])
+	assert.Equal(t, http.MethodGet, entry["http_method"])
+	assert.Equal(t, "202.65.229.173:51655", entry["client_addr"])
+	assert.Equal(t, ErrMissingProxyAuthorization.Error(), entry["error"])
+	assert.Equal(t, "error", entry["level"])
+}
+
+func TestServer_HandleCONNECT_LogsStructuredDialFailure(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger := zerolog.New(&logBuf)
+	server := New(&Config{
+		Credentials: &MockCredentialStore{},
+		Logger:      &logger,
+		Dial: func(network, addr string) (net.Conn, error) {
+			return nil, errors.New("dial failed")
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodConnect, "http://example.com", nil)
+	req.Host = "example.com:443"
+	req.RemoteAddr = "202.65.229.173:50059"
+	req.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("user:password")))
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
+	entry := parseJSONLogLine(t, &logBuf)
+	assert.Equal(t, "connect failed", entry["message"])
+	assert.Equal(t, "http", entry["protocol"])
+	assert.Equal(t, http.MethodConnect, entry["http_method"])
+	assert.Equal(t, "202.65.229.173:50059", entry["client_addr"])
+	assert.Equal(t, "example.com:443", entry["dest_addr"])
+	assert.Equal(t, "dial failed", entry["error"])
+	assert.NotEmpty(t, entry["latency"])
+	assert.Equal(t, "error", entry["level"])
+}
+
+func TestServer_HandleHTTP_LogsStructuredSuccessAtInfo(t *testing.T) {
+	targetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer targetServer.Close()
+
+	var logBuf bytes.Buffer
+	logger := zerolog.New(&logBuf).Level(zerolog.InfoLevel)
+	server := New(&Config{
+		Logger:            &logger,
+		Dial:              net.Dial,
+		Tracker:           traffic.NewTracker(),
+		ClientConnTimeout: 2 * time.Second,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, targetServer.URL, nil)
+	req.RemoteAddr = "202.65.229.173:51655"
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	entry := parseJSONLogLine(t, &logBuf)
+	assert.Equal(t, "request completed", entry["message"])
+	assert.Equal(t, "info", entry["level"])
+	assert.Equal(t, "http", entry["protocol"])
+	assert.Equal(t, http.MethodGet, entry["http_method"])
+	assert.Equal(t, "anonymous", entry["username"])
+	assert.Equal(t, float64(http.StatusOK), entry["status_code"])
+	assert.NotEmpty(t, entry["latency"])
+	assert.Equal(t, float64(0), entry["upload_bytes"])
+	assert.Equal(t, float64(2), entry["download_bytes"])
+}
+
+func TestServer_HandleHTTP_LogsDebugResolutionDetails(t *testing.T) {
+	targetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer targetServer.Close()
+
+	targetURL, err := url.Parse(targetServer.URL)
+	assert.NoError(t, err)
+	fakeTargetURL := "http://debug-target.test:" + targetURL.Port() + "/"
+
+	var logBuf bytes.Buffer
+	logger := zerolog.New(&logBuf).Level(zerolog.DebugLevel)
+	server := New(&Config{
+		Logger:  &logger,
+		Dial:    net.Dial,
+		Tracker: traffic.NewTracker(),
+		Resolver: resolverFunc(func(host string) (net.IP, error) {
+			return net.ParseIP(targetURL.Hostname()), nil
+		}),
+		ClientConnTimeout: 2 * time.Second,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, fakeTargetURL, nil)
+	req.RemoteAddr = "202.65.229.173:51655"
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+	entries := parseJSONLogLines(t, &logBuf)
+	assert.GreaterOrEqual(t, len(entries), 3)
+	assert.Equal(t, "http request accepted without authentication", entries[0]["message"])
+	assert.Equal(t, "debug", entries[0]["level"])
+	assert.Equal(t, "resolved proxy target", entries[1]["message"])
+	assert.Equal(t, "debug", entries[1]["level"])
+	assert.NotEmpty(t, entries[1]["resolved_addr"])
 }
 
 func TestProxy_ForwardRequests(t *testing.T) {
@@ -236,7 +445,7 @@ func TestServer_HandleHTTP_WithProxyRequest(t *testing.T) {
 	t.Run("Forward HTTP request successfully", func(t *testing.T) {
 		clientReq, err := http.NewRequest(http.MethodGet, targetURL+"/anything", nil)
 		if err != nil {
-			t.Fatalf("Gagal membuat request: %v", err)
+			t.Fatalf("failed to create request: %v", err)
 		}
 
 		clientReq.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("user:password")))
@@ -255,7 +464,7 @@ func TestServer_HandleHTTP_WithProxyRequest(t *testing.T) {
 		resp, err := proxyClient.Do(clientReq)
 		assert.NoError(t, err)
 		if err != nil {
-			t.Fatalf("[ERROR] Proxy client mengalami error: %v", err)
+			t.Fatalf("proxy client returned an error: %v", err)
 		}
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -287,13 +496,13 @@ func TestServer_HandleHTTP_InvalidURLScheme(t *testing.T) {
 	})
 
 	t.Run("Invalid URL Scheme", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "ftp://example.com", nil) // Skema tidak valid (ftp)
+		req := httptest.NewRequest(http.MethodGet, "ftp://example.com", nil) // Invalid scheme (ftp)
 		rr := httptest.NewRecorder()
 
 		server.ServeHTTP(rr, req)
 
-		assert.Equal(t, http.StatusBadRequest, rr.Code)            // Memastikan statusnya Bad Request
-		assert.Contains(t, rr.Body.String(), "Invalid URL scheme") // Memastikan pesan error sesuai
+		assert.Equal(t, http.StatusBadRequest, rr.Code)            // Verify the response status is Bad Request.
+		assert.Contains(t, rr.Body.String(), "Invalid target URL") // Verify the expected error message.
 	})
 }
 
@@ -306,7 +515,7 @@ func TestServer_HandleHTTP_ClientDoError(t *testing.T) {
 	})
 
 	t.Run("Failed to resolve DNS", func(t *testing.T) {
-		// Membuat permintaan HTTP Proxy
+		// Create a proxied HTTP request.
 		proxyReq := httptest.NewRequest(http.MethodGet, "http://unreachablehost", nil)
 		proxyReq.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("user:password")))
 
@@ -315,6 +524,206 @@ func TestServer_HandleHTTP_ClientDoError(t *testing.T) {
 		server.ServeHTTP(rr, proxyReq)
 
 		assert.Equal(t, http.StatusBadGateway, rr.Code)
-		assert.Contains(t, rr.Body.String(), "Bad gateway: failed to send request")
+		assert.Contains(t, rr.Body.String(), "Bad gateway: failed to resolve target host")
 	})
+}
+
+func TestNormalizeProxyTargetURL(t *testing.T) {
+	t.Run("Rejects nil request", func(t *testing.T) {
+		_, err := normalizeProxyTargetURL(nil)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "missing target url")
+	})
+
+	t.Run("Rejects missing host", func(t *testing.T) {
+		req := &http.Request{URL: &url.URL{Scheme: "http", Path: "/"}}
+
+		_, err := normalizeProxyTargetURL(req)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "missing url host")
+	})
+
+	t.Run("Uses request host when URL host is empty", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "http://placeholder", nil)
+		req.URL.Host = ""
+		req.URL.Path = "/status"
+		req.URL.RawQuery = "check=1"
+		req.Host = "example.com:8080"
+
+		targetURL, err := normalizeProxyTargetURL(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, "http", targetURL.Scheme)
+		assert.Equal(t, "example.com:8080", targetURL.Host)
+		assert.Equal(t, "/status", targetURL.Path)
+		assert.Equal(t, "check=1", targetURL.RawQuery)
+	})
+
+	t.Run("Rejects userinfo", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "http://user:pass@example.com/private", nil)
+
+		_, err := normalizeProxyTargetURL(req)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "userinfo")
+	})
+}
+
+func TestDialProxyTarget(t *testing.T) {
+	t.Run("Returns plain TCP conn for HTTP", func(t *testing.T) {
+		fakeConn := &MockNetConn{}
+
+		conn, err := dialProxyTarget(&url.URL{Scheme: "http", Host: "example.com"}, "127.0.0.1:80", func(network, addr string) (net.Conn, error) {
+			assert.Equal(t, "tcp", network)
+			assert.Equal(t, "127.0.0.1:80", addr)
+			return fakeConn, nil
+		}, time.Second)
+
+		assert.NoError(t, err)
+		assert.Same(t, fakeConn, conn)
+	})
+
+	t.Run("Returns handshake error for HTTPS", func(t *testing.T) {
+		clientConn, serverConn := net.Pipe()
+		defer serverConn.Close()
+
+		go func() {
+			// Trigger TLS handshake failure on client side.
+			_, _ = serverConn.Write([]byte("not-tls"))
+			_ = serverConn.Close()
+		}()
+
+		_, err := dialProxyTarget(&url.URL{Scheme: "https", Host: "example.com"}, "127.0.0.1:443", func(network, addr string) (net.Conn, error) {
+			return clientConn, nil
+		}, time.Second)
+
+		assert.Error(t, err)
+	})
+}
+
+func TestResolveProxyTargetAddr(t *testing.T) {
+	t.Run("Uses resolver result with default HTTPS port", func(t *testing.T) {
+		targetURL := &url.URL{Scheme: "https", Host: "validhost.com"}
+
+		addr, err := resolveProxyTargetAddr(targetURL, resolverFunc(func(host string) (net.IP, error) {
+			assert.Equal(t, "validhost.com", host)
+			return net.ParseIP("203.0.113.10"), nil
+		}))
+
+		assert.NoError(t, err)
+		assert.Equal(t, "203.0.113.10:443", addr)
+	})
+
+	t.Run("Keeps literal IP addresses without DNS lookup", func(t *testing.T) {
+		targetURL := &url.URL{Scheme: "http", Host: "127.0.0.1:9000"}
+
+		addr, err := resolveProxyTargetAddr(targetURL, resolverFunc(func(host string) (net.IP, error) {
+			t.Fatalf("resolver should not be called for literal IPs")
+			return nil, nil
+		}))
+
+		assert.NoError(t, err)
+		assert.Equal(t, "127.0.0.1:9000", addr)
+	})
+}
+
+func TestBuildOutboundProxyRequest(t *testing.T) {
+	requestBody := io.NopCloser(strings.NewReader("payload"))
+	incomingReq := httptest.NewRequest(http.MethodPost, "http://example.com/original?trace=1", strings.NewReader("ignored"))
+	incomingReq.Header.Set("Connection", "keep-alive")
+	incomingReq.Header.Set("Proxy-Authorization", "Basic dXNlcjpwYXNz")
+	incomingReq.Header.Set("X-Test-Header", "ok")
+	targetURL := &url.URL{Host: "example.com:8080", Path: "/rewritten", RawQuery: "trace=1"}
+
+	proxyReq := buildOutboundProxyRequest(incomingReq, targetURL, requestBody)
+
+	assert.Equal(t, "", proxyReq.RequestURI)
+	assert.Equal(t, "example.com:8080", proxyReq.Host)
+	assert.Equal(t, "/rewritten?trace=1", proxyReq.URL.RequestURI())
+	assert.Equal(t, "ok", proxyReq.Header.Get("X-Test-Header"))
+	assert.Empty(t, proxyReq.Header.Get("Connection"))
+	assert.Empty(t, proxyReq.Header.Get("Proxy-Authorization"))
+}
+
+func TestServer_HandleHTTP_ReadResponseError(t *testing.T) {
+	logger := zerolog.New(io.Discard)
+
+	server := New(&Config{
+		Logger:            &logger,
+		ClientConnTimeout: 2 * time.Second,
+		Resolver: resolverFunc(func(host string) (net.IP, error) {
+			assert.Equal(t, "example.com", host)
+			return net.ParseIP("127.0.0.1"), nil
+		}),
+		Dial: func(network, addr string) (net.Conn, error) {
+			clientConn, serverConn := net.Pipe()
+			go func() {
+				defer serverConn.Close()
+				_, _ = io.Copy(io.Discard, serverConn)
+			}()
+			return clientConn, nil
+		},
+	})
+
+	proxyReq := httptest.NewRequest(http.MethodGet, "http://example.com/health", nil)
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, proxyReq)
+
+	assert.Equal(t, http.StatusBadGateway, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Bad gateway: failed to read response")
+}
+
+func TestServer_HandleHTTP_DialTargetError(t *testing.T) {
+	logger := zerolog.New(io.Discard)
+
+	server := New(&Config{
+		Logger:            &logger,
+		ClientConnTimeout: 2 * time.Second,
+		Resolver: resolverFunc(func(host string) (net.IP, error) {
+			assert.Equal(t, "example.com", host)
+			return net.ParseIP("127.0.0.1"), nil
+		}),
+		Dial: func(network, addr string) (net.Conn, error) {
+			assert.Equal(t, "tcp", network)
+			assert.Equal(t, "127.0.0.1:80", addr)
+			return nil, errors.New("dial failed")
+		},
+	})
+
+	proxyReq := httptest.NewRequest(http.MethodGet, "http://example.com/health", nil)
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, proxyReq)
+
+	assert.Equal(t, http.StatusBadGateway, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Bad gateway: failed to send request")
+}
+
+func TestServer_HandleHTTP_WriteRequestError(t *testing.T) {
+	logger := zerolog.New(io.Discard)
+
+	server := New(&Config{
+		Logger:            &logger,
+		ClientConnTimeout: 2 * time.Second,
+		Resolver: resolverFunc(func(host string) (net.IP, error) {
+			assert.Equal(t, "example.com", host)
+			return net.ParseIP("127.0.0.1"), nil
+		}),
+		Dial: func(network, addr string) (net.Conn, error) {
+			assert.Equal(t, "tcp", network)
+			assert.Equal(t, "127.0.0.1:80", addr)
+			return &writeFailConn{}, nil
+		},
+	})
+
+	proxyReq := httptest.NewRequest(http.MethodGet, "http://example.com/health", nil)
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, proxyReq)
+
+	assert.Equal(t, http.StatusBadGateway, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Bad gateway: failed to send request")
 }
