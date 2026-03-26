@@ -115,10 +115,8 @@ NanoProxy provides the following features:
 - [x] **TOR support.** NanoProxy can be run with Tor support to provide anonymized network traffic (Docker only).
 - [x] **IP Rotation with Tor.** NanoProxy allows for IP rotation using the Tor network, providing enhanced anonymity and
   privacy by periodically changing exit nodes.
-- [ ] **Authentication Management from Dashboard.** Easily manage user authentication settings and credentials via a
+- [x] **Authentication Management from Dashboard.** Easily manage user authentication settings and credentials via a
   comprehensive and user-friendly web dashboard, ensuring secure access to proxy features.
-- [ ] **Change IP via API.** Programmatically request IP changes through a robust API, facilitating automated and
-  dynamic IP management for different use cases.
 
 ## Installation
 
