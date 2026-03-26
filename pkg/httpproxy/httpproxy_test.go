@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,6 +37,12 @@ func (m *MockResolver) Resolve(host string) (net.IP, error) {
 	return nil, errors.New("host not found")
 }
 
+type resolverFunc func(host string) (net.IP, error)
+
+func (f resolverFunc) Resolve(host string) (net.IP, error) {
+	return f(host)
+}
+
 type MockNetConn struct{}
 
 func (m *MockNetConn) Read(b []byte) (n int, err error) {
@@ -55,6 +62,17 @@ func (m *MockNetConn) RemoteAddr() net.Addr               { return nil }
 func (m *MockNetConn) SetDeadline(t time.Time) error      { return nil }
 func (m *MockNetConn) SetReadDeadline(t time.Time) error  { return nil }
 func (m *MockNetConn) SetWriteDeadline(t time.Time) error { return nil }
+
+type writeFailConn struct{}
+
+func (c *writeFailConn) Read(_ []byte) (int, error)         { return 0, io.EOF }
+func (c *writeFailConn) Write(_ []byte) (int, error)        { return 0, errors.New("write failed") }
+func (c *writeFailConn) Close() error                       { return nil }
+func (c *writeFailConn) LocalAddr() net.Addr                { return nil }
+func (c *writeFailConn) RemoteAddr() net.Addr               { return nil }
+func (c *writeFailConn) SetDeadline(_ time.Time) error      { return nil }
+func (c *writeFailConn) SetReadDeadline(_ time.Time) error  { return nil }
+func (c *writeFailConn) SetWriteDeadline(_ time.Time) error { return nil }
 
 type MockHijacker struct {
 	*httptest.ResponseRecorder
@@ -236,7 +254,7 @@ func TestServer_HandleHTTP_WithProxyRequest(t *testing.T) {
 	t.Run("Forward HTTP request successfully", func(t *testing.T) {
 		clientReq, err := http.NewRequest(http.MethodGet, targetURL+"/anything", nil)
 		if err != nil {
-			t.Fatalf("Gagal membuat request: %v", err)
+			t.Fatalf("failed to create request: %v", err)
 		}
 
 		clientReq.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("user:password")))
@@ -255,7 +273,7 @@ func TestServer_HandleHTTP_WithProxyRequest(t *testing.T) {
 		resp, err := proxyClient.Do(clientReq)
 		assert.NoError(t, err)
 		if err != nil {
-			t.Fatalf("[ERROR] Proxy client mengalami error: %v", err)
+			t.Fatalf("proxy client returned an error: %v", err)
 		}
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -306,7 +324,7 @@ func TestServer_HandleHTTP_ClientDoError(t *testing.T) {
 	})
 
 	t.Run("Failed to resolve DNS", func(t *testing.T) {
-		// Membuat permintaan HTTP Proxy
+		// Create a proxied HTTP request.
 		proxyReq := httptest.NewRequest(http.MethodGet, "http://unreachablehost", nil)
 		proxyReq.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("user:password")))
 
@@ -317,4 +335,204 @@ func TestServer_HandleHTTP_ClientDoError(t *testing.T) {
 		assert.Equal(t, http.StatusBadGateway, rr.Code)
 		assert.Contains(t, rr.Body.String(), "Bad gateway: failed to resolve target host")
 	})
+}
+
+func TestNormalizeProxyTargetURL(t *testing.T) {
+	t.Run("Rejects nil request", func(t *testing.T) {
+		_, err := normalizeProxyTargetURL(nil)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "missing target url")
+	})
+
+	t.Run("Rejects missing host", func(t *testing.T) {
+		req := &http.Request{URL: &url.URL{Scheme: "http", Path: "/"}}
+
+		_, err := normalizeProxyTargetURL(req)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "missing url host")
+	})
+
+	t.Run("Uses request host when URL host is empty", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "http://placeholder", nil)
+		req.URL.Host = ""
+		req.URL.Path = "/status"
+		req.URL.RawQuery = "check=1"
+		req.Host = "example.com:8080"
+
+		targetURL, err := normalizeProxyTargetURL(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, "http", targetURL.Scheme)
+		assert.Equal(t, "example.com:8080", targetURL.Host)
+		assert.Equal(t, "/status", targetURL.Path)
+		assert.Equal(t, "check=1", targetURL.RawQuery)
+	})
+
+	t.Run("Rejects userinfo", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "http://user:pass@example.com/private", nil)
+
+		_, err := normalizeProxyTargetURL(req)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "userinfo")
+	})
+}
+
+func TestDialProxyTarget(t *testing.T) {
+	t.Run("Returns plain TCP conn for HTTP", func(t *testing.T) {
+		fakeConn := &MockNetConn{}
+
+		conn, err := dialProxyTarget(&url.URL{Scheme: "http", Host: "example.com"}, "127.0.0.1:80", func(network, addr string) (net.Conn, error) {
+			assert.Equal(t, "tcp", network)
+			assert.Equal(t, "127.0.0.1:80", addr)
+			return fakeConn, nil
+		}, time.Second)
+
+		assert.NoError(t, err)
+		assert.Same(t, fakeConn, conn)
+	})
+
+	t.Run("Returns handshake error for HTTPS", func(t *testing.T) {
+		clientConn, serverConn := net.Pipe()
+		defer serverConn.Close()
+
+		go func() {
+			// Trigger TLS handshake failure on client side.
+			_, _ = serverConn.Write([]byte("not-tls"))
+			_ = serverConn.Close()
+		}()
+
+		_, err := dialProxyTarget(&url.URL{Scheme: "https", Host: "example.com"}, "127.0.0.1:443", func(network, addr string) (net.Conn, error) {
+			return clientConn, nil
+		}, time.Second)
+
+		assert.Error(t, err)
+	})
+}
+
+func TestResolveProxyTargetAddr(t *testing.T) {
+	t.Run("Uses resolver result with default HTTPS port", func(t *testing.T) {
+		targetURL := &url.URL{Scheme: "https", Host: "validhost.com"}
+
+		addr, err := resolveProxyTargetAddr(targetURL, resolverFunc(func(host string) (net.IP, error) {
+			assert.Equal(t, "validhost.com", host)
+			return net.ParseIP("203.0.113.10"), nil
+		}))
+
+		assert.NoError(t, err)
+		assert.Equal(t, "203.0.113.10:443", addr)
+	})
+
+	t.Run("Keeps literal IP addresses without DNS lookup", func(t *testing.T) {
+		targetURL := &url.URL{Scheme: "http", Host: "127.0.0.1:9000"}
+
+		addr, err := resolveProxyTargetAddr(targetURL, resolverFunc(func(host string) (net.IP, error) {
+			t.Fatalf("resolver should not be called for literal IPs")
+			return nil, nil
+		}))
+
+		assert.NoError(t, err)
+		assert.Equal(t, "127.0.0.1:9000", addr)
+	})
+}
+
+func TestBuildOutboundProxyRequest(t *testing.T) {
+	requestBody := io.NopCloser(strings.NewReader("payload"))
+	incomingReq := httptest.NewRequest(http.MethodPost, "http://example.com/original?trace=1", strings.NewReader("ignored"))
+	incomingReq.Header.Set("Connection", "keep-alive")
+	incomingReq.Header.Set("Proxy-Authorization", "Basic dXNlcjpwYXNz")
+	incomingReq.Header.Set("X-Test-Header", "ok")
+	targetURL := &url.URL{Host: "example.com:8080", Path: "/rewritten", RawQuery: "trace=1"}
+
+	proxyReq := buildOutboundProxyRequest(incomingReq, targetURL, requestBody)
+
+	assert.Equal(t, "", proxyReq.RequestURI)
+	assert.Equal(t, "example.com:8080", proxyReq.Host)
+	assert.Equal(t, "/rewritten?trace=1", proxyReq.URL.RequestURI())
+	assert.Equal(t, "ok", proxyReq.Header.Get("X-Test-Header"))
+	assert.Empty(t, proxyReq.Header.Get("Connection"))
+	assert.Empty(t, proxyReq.Header.Get("Proxy-Authorization"))
+}
+
+func TestServer_HandleHTTP_ReadResponseError(t *testing.T) {
+	logger := zerolog.New(io.Discard)
+
+	server := New(&Config{
+		Logger:            &logger,
+		ClientConnTimeout: 2 * time.Second,
+		Resolver: resolverFunc(func(host string) (net.IP, error) {
+			assert.Equal(t, "example.com", host)
+			return net.ParseIP("127.0.0.1"), nil
+		}),
+		Dial: func(network, addr string) (net.Conn, error) {
+			clientConn, serverConn := net.Pipe()
+			go func() {
+				defer serverConn.Close()
+				_, _ = io.Copy(io.Discard, serverConn)
+			}()
+			return clientConn, nil
+		},
+	})
+
+	proxyReq := httptest.NewRequest(http.MethodGet, "http://example.com/health", nil)
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, proxyReq)
+
+	assert.Equal(t, http.StatusBadGateway, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Bad gateway: failed to read response")
+}
+
+func TestServer_HandleHTTP_DialTargetError(t *testing.T) {
+	logger := zerolog.New(io.Discard)
+
+	server := New(&Config{
+		Logger:            &logger,
+		ClientConnTimeout: 2 * time.Second,
+		Resolver: resolverFunc(func(host string) (net.IP, error) {
+			assert.Equal(t, "example.com", host)
+			return net.ParseIP("127.0.0.1"), nil
+		}),
+		Dial: func(network, addr string) (net.Conn, error) {
+			assert.Equal(t, "tcp", network)
+			assert.Equal(t, "127.0.0.1:80", addr)
+			return nil, errors.New("dial failed")
+		},
+	})
+
+	proxyReq := httptest.NewRequest(http.MethodGet, "http://example.com/health", nil)
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, proxyReq)
+
+	assert.Equal(t, http.StatusBadGateway, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Bad gateway: failed to send request")
+}
+
+func TestServer_HandleHTTP_WriteRequestError(t *testing.T) {
+	logger := zerolog.New(io.Discard)
+
+	server := New(&Config{
+		Logger:            &logger,
+		ClientConnTimeout: 2 * time.Second,
+		Resolver: resolverFunc(func(host string) (net.IP, error) {
+			assert.Equal(t, "example.com", host)
+			return net.ParseIP("127.0.0.1"), nil
+		}),
+		Dial: func(network, addr string) (net.Conn, error) {
+			assert.Equal(t, "tcp", network)
+			assert.Equal(t, "127.0.0.1:80", addr)
+			return &writeFailConn{}, nil
+		},
+	})
+
+	proxyReq := httptest.NewRequest(http.MethodGet, "http://example.com/health", nil)
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, proxyReq)
+
+	assert.Equal(t, http.StatusBadGateway, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Bad gateway: failed to send request")
 }

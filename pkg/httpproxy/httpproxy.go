@@ -1,6 +1,8 @@
 package httpproxy
 
 import (
+	"bufio"
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -182,7 +184,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	clientIP := r.RemoteAddr
 
-	targetURL, err := normalizeProxyTargetURL(r.URL)
+	targetURL, err := normalizeProxyTargetURL(r)
 	if err != nil {
 		s.config.Logger.Error().
 			Str("client_addr", clientIP).
@@ -199,10 +201,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	// Resolve the hostname via the configured resolver so the request URL is
-	// derived from a resolver-controlled value rather than raw user input.
-	// This breaks the CodeQL/gosec SSRF taint from r.URL → client.Do.
-	resolvedURL, err := resolveProxyTargetURL(targetURL, s.config.Resolver)
+	resolvedAddr, err := resolveProxyTargetAddr(targetURL, s.config.Resolver)
 	if err != nil {
 		latency := time.Since(startTime).Milliseconds()
 		s.config.Logger.Error().
@@ -214,50 +213,47 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	proxyReq, err := http.NewRequest(r.Method, resolvedURL.String(), proxyReqBody) // #nosec G107 -- URL is built from resolver output, not raw user input
+	serverConn, err := dialProxyTarget(targetURL, resolvedAddr, s.config.Dial, s.config.ClientConnTimeout)
 	if err != nil {
 		latency := time.Since(startTime).Milliseconds()
 		s.config.Logger.Error().
 			Str("client_addr", clientIP).
 			Str("dest_addr", targetURL.String()).
 			Str("latency", fmt.Sprintf("%dms", latency)).
-			Msg("Failed to create request - Internal Server Error")
-		http.Error(w, "Internal server error while creating request", http.StatusInternalServerError)
+			Msg("Failed to connect to target - Bad Gateway")
+		http.Error(w, "Bad gateway: failed to send request", http.StatusBadGateway)
 		return
 	}
-	// Preserve the original Host header so virtual-hosting works correctly.
-	proxyReq.Host = targetURL.Host
+	defer serverConn.Close()
 
-	for key, values := range r.Header {
-		if isHopHeader(key) {
-			continue
-		}
-
-		for _, value := range values {
-			proxyReq.Header.Add(key, value)
-		}
+	proxyReq := buildOutboundProxyRequest(r, targetURL, proxyReqBody)
+	if err := proxyReq.Write(serverConn); err != nil {
+		latency := time.Since(startTime).Milliseconds()
+		s.config.Logger.Error().
+			Str("client_addr", clientIP).
+			Str("dest_addr", targetURL.String()).
+			Str("latency", fmt.Sprintf("%dms", latency)).
+			Msg("Failed to send request - Bad Gateway")
+		http.Error(w, "Bad gateway: failed to send request", http.StatusBadGateway)
+		return
 	}
 
-	client := &http.Client{
-		Timeout: s.config.ClientConnTimeout,
-	}
-
-	resp, err := client.Do(proxyReq) // #nosec G107 -- URL is built from resolver output, not raw user input
+	resp, err := http.ReadResponse(bufio.NewReader(serverConn), proxyReq)
 	latency := time.Since(startTime).Milliseconds()
 	if err != nil {
 		s.config.Logger.Error().
 			Str("client_addr", clientIP).
-			Str("dest_addr", r.URL.String()).
+			Str("dest_addr", targetURL.String()).
 			Str("latency", fmt.Sprintf("%dms", latency)).
-			Msg("Failed to send request - Bad Gateway")
-		http.Error(w, "Bad gateway: failed to send request", http.StatusBadGateway)
+			Msg("Failed to read response - Bad Gateway")
+		http.Error(w, "Bad gateway: failed to read response", http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
 
 	s.config.Logger.Info().
 		Str("client_addr", clientIP).
-		Str("dest_addr", r.URL.String()).
+		Str("dest_addr", targetURL.String()).
 		Str("latency", fmt.Sprintf("%dms", latency)).
 		Msg("HTTP request successfully proxied")
 
@@ -291,13 +287,7 @@ func extractClientIP(remoteAddr string) string {
 	return host
 }
 
-// resolveProxyTargetURL resolves the hostname in targetURL to an IP address via
-// the configured resolver and returns a new *url.URL whose Host is the resolved
-// IP (+ original port). Building the outgoing URL from resolver output rather
-// than directly from user-supplied data breaks the SSRF taint tracked by CodeQL
-// and gosec G704. If the hostname is already a valid IP address, resolution is
-// skipped and the IP is used directly.
-func resolveProxyTargetURL(targetURL *url.URL, res resolver.Resolver) (*url.URL, error) {
+func resolveProxyTargetAddr(targetURL *url.URL, res resolver.Resolver) (string, error) {
 	hostname := targetURL.Hostname()
 	port := targetURL.Port()
 	if port == "" {
@@ -315,32 +305,33 @@ func resolveProxyTargetURL(targetURL *url.URL, res resolver.Resolver) (*url.URL,
 	} else {
 		resolved, err := res.Resolve(hostname)
 		if err != nil {
-			return nil, fmt.Errorf("resolve %q: %w", hostname, err)
+			return "", fmt.Errorf("resolve %q: %w", hostname, err)
 		}
 		ipStr = resolved.String()
 	}
 
-	resolved := &url.URL{
-		Scheme:   targetURL.Scheme,
-		Host:     net.JoinHostPort(ipStr, port),
-		Path:     targetURL.Path,
-		RawPath:  targetURL.RawPath,
-		RawQuery: targetURL.RawQuery,
-	}
-	return resolved, nil
+	return net.JoinHostPort(ipStr, port), nil
 }
 
-func normalizeProxyTargetURL(rawURL *url.URL) (*url.URL, error) {
-	if rawURL == nil {
+func normalizeProxyTargetURL(r *http.Request) (*url.URL, error) {
+	if r == nil || r.URL == nil {
 		return nil, fmt.Errorf("missing target url")
 	}
 
+	rawURL := r.URL
 	scheme := strings.ToLower(strings.TrimSpace(rawURL.Scheme))
 	if scheme != "http" && scheme != "https" {
 		return nil, fmt.Errorf("unsupported url scheme: %q", rawURL.Scheme)
 	}
 
+	if rawURL.User != nil {
+		return nil, fmt.Errorf("userinfo is not allowed")
+	}
+
 	host := strings.TrimSpace(rawURL.Host)
+	if host == "" {
+		host = strings.TrimSpace(r.Host)
+	}
 	if host == "" {
 		return nil, fmt.Errorf("missing url host")
 	}
@@ -377,6 +368,62 @@ func normalizeProxyTargetURL(rawURL *url.URL) (*url.URL, error) {
 	}
 
 	return normalized, nil
+}
+
+func buildOutboundProxyRequest(r *http.Request, targetURL *url.URL, body io.ReadCloser) *http.Request {
+	proxyReq := r.Clone(r.Context())
+	proxyReq.URL = &url.URL{
+		Path:     targetURL.Path,
+		RawPath:  targetURL.RawPath,
+		RawQuery: targetURL.RawQuery,
+	}
+	proxyReq.Host = targetURL.Host
+	proxyReq.RequestURI = ""
+	proxyReq.Body = body
+	proxyReq.Close = true
+	proxyReq.Header = make(http.Header, len(r.Header))
+
+	for key, values := range r.Header {
+		if isHopHeader(key) {
+			continue
+		}
+
+		for _, value := range values {
+			proxyReq.Header.Add(key, value)
+		}
+	}
+
+	return proxyReq
+}
+
+func dialProxyTarget(targetURL *url.URL, resolvedAddr string, dial func(network, addr string) (net.Conn, error), timeout time.Duration) (net.Conn, error) {
+	conn, err := dial("tcp", resolvedAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	if timeout > 0 {
+		_ = conn.SetDeadline(time.Now().Add(timeout))
+	}
+
+	if targetURL.Scheme != "https" {
+		return conn, nil
+	}
+
+	tlsConn := tls.Client(conn, &tls.Config{
+		ServerName: targetURL.Hostname(),
+		MinVersion: tls.VersionTLS12,
+	})
+	if err := tlsConn.Handshake(); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+
+	if timeout > 0 {
+		_ = tlsConn.SetDeadline(time.Now().Add(timeout))
+	}
+
+	return tlsConn, nil
 }
 
 type countingReadCloser struct {
