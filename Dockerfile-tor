@@ -6,7 +6,7 @@ RUN apk update && \
 
 RUN mkdir -p /var/log/supervisor /var/log/tor
 
-COPY $TARGETPLATFORM/nanoproxy /usr/bin
+COPY --chmod=0755 $TARGETPLATFORM/nanoproxy /usr/bin/nanoproxy
 COPY supervisord.conf /etc/supervisord.conf
 
 RUN mkdir -p /etc/tor && \
@@ -14,7 +14,6 @@ RUN mkdir -p /etc/tor && \
 
 RUN mkdir -p /var/lib/tor
 
-RUN mkdir -p /etc/nanoproxy
 
 ENV USER_STORE_PATH=/etc/nanoproxy/data.db
 

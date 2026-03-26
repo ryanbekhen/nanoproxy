@@ -1,8 +1,6 @@
 FROM alpine:3.21
 ARG TARGETPLATFORM
-COPY $TARGETPLATFORM/nanoproxy /usr/bin
-
-RUN mkdir -p /etc/nanoproxy
+COPY --chmod=0755 $TARGETPLATFORM/nanoproxy /usr/bin/nanoproxy
 
 ENV USER_STORE_PATH=/etc/nanoproxy/data.db
 
