@@ -219,107 +219,21 @@ docker run --rm -e TOR_ENABLED=true -d --privileged --cap-add=NET_ADMIN --sysctl
 
 ## Configuration
 
-You can also set the configuration using environment variables directly in your shell:
+NanoProxy is configured entirely through environment variables. For detailed information about all available
+configuration options, environment variable reference, and examples, see [docs/CONFIG.md](docs/CONFIG.md).
+
+### Quick Start Configuration
 
 ```shell
 export ADDR=:1080
 export ADDR_HTTP=:8080
 export ADDR_ADMIN=:9090
-export NETWORK=tcp
-export TZ=Asia/Jakarta
-export CLIENT_TIMEOUT=10s
-export CREDENTIALS=username:passwordHash
-export USER_STORE_PATH=/var/lib/nanoproxy/data.db
-export ADMIN_COOKIE_SECURE=true
-export ADMIN_MAX_LOGIN_ATTEMPTS=5
-export ADMIN_LOGIN_WINDOW=5m
-export ADMIN_LOCKOUT_DURATION=10m
-export ADMIN_ALLOWED_ORIGINS=https://admin.example.com
+export LOG_LEVEL=info
+export USER_STORE_PATH=./nanoproxy-data.db
 ```
 
-For the creation of the password hash, you can use the `htpasswd -nB username` command, but you need to install the
-`apache2-utils` package first. To install the package, run the following command:
-
-```shell
-sudo apt install apache2-utils
-```
-
-Then, you can use the `htpasswd` command to generate the password hash:
-
-```shell
-htpasswd -nB username
-```
-
-This will prompt you to enter the password. After entering the password, the command will output the username and the
-password hash. You can then use the output to set the `CREDENTIALS` environment variable.
-
-The following table lists the available configuration options:
-
-| Name                     | Description                                                     | Default Value       |
-|--------------------------|-----------------------------------------------------------------|---------------------|
-| ADDR                     | The address to listen on.                                       | `:1080`             |
-| ADDR_HTTP                | The address to listen on for HTTP requests.                     | `:8080`             |
-| ADDR_ADMIN               | The address to listen on for the admin console.                 | `:9090`             |
-| NETWORK                  | The network to listen on. (tcp, tcp4, tcp6)                     | `tcp`               |
-| TZ                       | The timezone to use.                                            | `Local`             |
-| CLIENT_TIMEOUT           | The timeout for connecting to the destination Server.           | `10s`               |
-| DNS_TIMEOUT              | The timeout for DNS resolution.                                 | `10s`               |
-| CREDENTIALS              | The credentials to use for authentication.                      | `""`                |
-| USER_STORE_PATH          | BoltDB path for persisted admin-managed proxy users.            | `nanoproxy-data.db` |
-| ADMIN_COOKIE_SECURE      | Set admin session cookie as Secure (requires HTTPS).            | `false`             |
-| ADMIN_MAX_LOGIN_ATTEMPTS | Max failed admin logins allowed inside login window.            | `5`                 |
-| ADMIN_LOGIN_WINDOW       | Time window used to count failed admin login attempts.          | `5m`                |
-| ADMIN_LOCKOUT_DURATION   | Temporary lockout duration after too many failed logins.        | `10m`               |
-| ADMIN_ALLOWED_ORIGINS    | Allowed admin request origins (comma-separated, optional).      | `""`                |
-| TOR_ENABLED              | Enable Tor support. (works only on Docker)                      | `false`             |
-| TOR_IDENTITY_INTERVAL    | The interval to change the Tor identity. (works only on Docker) | `10m`               |
-
-- **ADDR_HTTP**: By default, NanoProxy listens for HTTP proxy traffic on `:8080`. You can set this address to any host:
-  port combination for custom setups.
-- **CREDENTIALS**: When enabled, both SOCKS5 and HTTP Proxy requests are authenticated using the credentials provided in
-  this field. This supports `username:password` pairs as bootstrap credentials loaded at startup.
-- **USER_STORE_PATH**: Admin-created proxy users are stored on disk at this path so they survive restarts. NanoProxy
-  still authenticates requests from its in-memory credential stores, and only admin mutations trigger disk writes, so
-  the proxy hot path is not slowed down by persistence.
-- **ADMIN_COOKIE_SECURE**: Set this to `true` when serving admin over HTTPS so browser only sends the admin session
-  cookie on secure transport.
-- **ADMIN_ALLOWED_ORIGINS**: Optional CSRF-origin allowlist for admin requests. When set, admin state-changing requests
-  must include a matching `Origin` or `Referer`.
-
-## Admin Console and Persistent Proxy Users
-
-NanoProxy starts an admin console on `ADDR_ADMIN`.
-
-- Visit `/` or `/admin` on the admin address.
-- On first run (when no admin exists in `USER_STORE_PATH`), create the admin account at `/admin/setup`.
-- After setup, log in using that admin account.
-- Add or delete proxy users from the UI.
-- Those proxy users are saved to `USER_STORE_PATH` and loaded again on restart.
-
-Example:
-
-```shell
-export ADDR=:1080
-export ADDR_HTTP=:8080
-export ADDR_ADMIN=:9090
-export USER_STORE_PATH=/var/lib/nanoproxy/data.db
-export ADMIN_COOKIE_SECURE=true
-export ADMIN_ALLOWED_ORIGINS=https://admin.example.com
-go run .
-```
-
-Notes:
-
-- `CREDENTIALS` remain useful for bootstrap or emergency static users.
-- Admin-managed users are stored separately and reloaded automatically.
-- Both HTTP and SOCKS5 reuse the same in-memory authentication view, so behavior stays aligned across protocols.
-
-### Admin Security Notes
-
-- Admin state-changing actions use CSRF tokens.
-- CSRF tokens are rotated after successful state-changing actions.
-- Login attempts are rate-limited (`ADMIN_MAX_LOGIN_ATTEMPTS`, `ADMIN_LOGIN_WINDOW`, `ADMIN_LOCKOUT_DURATION`).
-- If `ADMIN_ALLOWED_ORIGINS` is configured, requests without allowed `Origin`/`Referer` are rejected.
+Then access the admin panel at `http://localhost:9090/admin/setup` to create your initial admin account and add proxy
+users.
 
 ## Logging
 
@@ -347,7 +261,8 @@ curl -x socks5://localhost:1080 https://google.com
 curl -x localhost:8080 https://google.com
 ```
 
-If credentials are enabled for HTTP Proxy, use the `-U` flag to supply the username and password:
+If the HTTP proxy requires authentication, use the `-U` flag to supply the username and password for a proxy user
+created in the Admin Console:
 
 ```shell
 curl -x http://localhost:8080 -U username:password https://example.com
@@ -357,8 +272,9 @@ In both cases, replace `localhost:8080` with the actual address and port where y
 
 ## Authentication for HTTP Proxy
 
-If authentication is enabled (via the `CREDENTIALS` configuration), the HTTP Proxy requires clients to include the
-`Proxy-Authorization` header in their requests. The header must use the following format:
+Proxy users are managed through the Admin Console. After setting up an admin account, you can create and manage proxy
+users through the web interface. The HTTP Proxy requires clients to include the `Proxy-Authorization` header in their
+requests with the correct format:
 
 ```http
 Proxy-Authorization: Basic <base64_encoded("username:password")>

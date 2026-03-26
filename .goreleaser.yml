@@ -137,6 +137,7 @@ archives:
           - zip
     files:
       - README.md
+      - docs/CONFIG.md
       - LICENSE
 
 

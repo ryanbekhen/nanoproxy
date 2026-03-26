@@ -10,7 +10,6 @@ type Config struct {
 	ADDRHttp              string        `env:"ADDR_HTTP" envDefault:":8080"`
 	ADDRAdmin             string        `env:"ADDR_ADMIN" envDefault:":9090"`
 	UserStorePath         string        `env:"USER_STORE_PATH" envDefault:"nanoproxy-data.db"`
-	Credentials           []string      `env:"CREDENTIALS" envSeparator:","`
 	AdminCookieSecure     bool          `env:"ADMIN_COOKIE_SECURE" envDefault:"false"`
 	AdminMaxLoginAttempts int           `env:"ADMIN_MAX_LOGIN_ATTEMPTS" envDefault:"5"`
 	AdminLoginWindow      time.Duration `env:"ADMIN_LOGIN_WINDOW" envDefault:"5m"`

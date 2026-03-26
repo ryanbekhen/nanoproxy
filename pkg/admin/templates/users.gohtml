@@ -220,16 +220,81 @@
 
         const generatedPassword = document.getElementById('generated-password-value');
         const copyPasswordButton = document.getElementById('copy-generated-password');
-        if (generatedPassword && copyPasswordButton && navigator.clipboard) {
+        if (generatedPassword && copyPasswordButton) {
             copyPasswordButton.addEventListener('click', async function () {
-                try {
-                    await navigator.clipboard.writeText(generatedPassword.textContent.trim());
-                    copyPasswordButton.textContent = 'Copied';
+                const passwordText = generatedPassword.textContent.trim();
+                let success = false;
+
+                // Try modern clipboard API first
+                if (navigator.clipboard) {
+                    try {
+                        await navigator.clipboard.writeText(passwordText);
+                        success = true;
+                    } catch (err) {
+                        console.error('Clipboard API failed:', err);
+                    }
+                }
+
+                // Fallback to older method
+                if (!success) {
+                    try {
+                        const textArea = document.createElement('textarea');
+                        textArea.value = passwordText;
+                        textArea.style.position = 'fixed';
+                        textArea.style.left = '-999999px';
+                        textArea.style.top = '-999999px';
+                        document.body.appendChild(textArea);
+                        textArea.focus();
+                        textArea.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(textArea);
+                        success = true;
+                    } catch (err) {
+                        console.error('Fallback copy method failed:', err);
+                    }
+                }
+
+                // Show feedback
+                const originalText = copyPasswordButton.textContent;
+                const originalClass = copyPasswordButton.className;
+
+                if (success) {
+                    copyPasswordButton.textContent = '✓ Copied';
+                    copyPasswordButton.classList.remove('bg-emerald-400/10', 'border-emerald-400/30', 'text-emerald-300');
+                    copyPasswordButton.classList.add('bg-emerald-400/30', 'border-emerald-400/60', 'text-emerald-100', 'font-semibold');
+
+                    // Show toast notification
+                    const toastRegion = document.getElementById('toast-region');
+                    if (toastRegion) {
+                        const toast = document.createElement('div');
+                        toast.setAttribute('data-toast', 'true');
+                        toast.className = 'rounded-lg border border-emerald-400/30 bg-emerald-500/20 p-4 text-sm text-emerald-100 shadow-lg backdrop-blur opacity-0 translate-y-2 transition-all duration-250';
+                        toast.innerHTML = '<div class="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg><span>Password copied to clipboard</span></div>';
+                        toastRegion.appendChild(toast);
+                    }
+
                     window.setTimeout(function () {
-                        copyPasswordButton.textContent = 'Copy password';
-                    }, 1500);
-                } catch (err) {
-                    copyPasswordButton.textContent = 'Copy failed';
+                        copyPasswordButton.textContent = originalText;
+                        copyPasswordButton.className = originalClass;
+                    }, 2000);
+                } else {
+                    copyPasswordButton.textContent = '✗ Copy failed';
+                    copyPasswordButton.classList.add('text-red-400');
+
+                    // Show error toast notification
+                    const toastRegion = document.getElementById('toast-region');
+                    if (toastRegion) {
+                        const toast = document.createElement('div');
+                        toast.setAttribute('data-toast', 'true');
+                        toast.className = 'rounded-lg border border-red-400/30 bg-red-500/20 p-4 text-sm text-red-100 shadow-lg backdrop-blur opacity-0 translate-y-2 transition-all duration-250';
+                        toast.innerHTML = '<div class="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg><span>Failed to copy password</span></div>';
+                        toastRegion.appendChild(toast);
+                    }
+
+                    window.setTimeout(function () {
+                        copyPasswordButton.textContent = originalText;
+                        copyPasswordButton.className = originalClass;
+                    }, 2000);
                 }
             });
         }

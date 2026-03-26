@@ -13,8 +13,8 @@
 ## Key architecture and data flow
 
 - Config is env-driven via struct tags in `pkg/config/config.go` (`caarlos0/env/v10`), not via JSON/YAML files.
-- Credentials are loaded from `CREDENTIALS` (`username:bcryptHash` list), stored in `pkg/credential/credentials.go`, and
-  validated with bcrypt.
+- User credentials are managed through the Admin Console and stored in `USER_STORE_PATH` (BoltDB). Credentials are
+  validated with bcrypt in `pkg/credential/credentials.go`.
 - SOCKS5 flow (`pkg/socks5/socks5.go`): handshake -> auth negotiation -> request parse (`pkg/socks5/request.go`) ->
   optional DNS resolve -> relay.
 - HTTP flow (`pkg/httpproxy/httpproxy.go`): `ServeHTTP` dispatches `CONNECT` vs normal HTTP; hop-by-hop headers are

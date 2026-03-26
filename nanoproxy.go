@@ -168,17 +168,5 @@ func buildCredentialStore(cfg *config.Config) (*credential.StaticCredentialStore
 		return nil, userStore, fmt.Errorf("load persisted proxy users: %w", err)
 	}
 
-	for _, cred := range cfg.Credentials {
-		credArr := strings.SplitN(cred, ":", 2)
-		if len(credArr) != 2 || credArr[0] == "" || credArr[1] == "" {
-			return nil, userStore, fmt.Errorf("invalid credential: %s", cred)
-		}
-		credentials.SetHashed(credArr[0], credArr[1])
-	}
-
-	if credentials.Count() == 0 {
-		return nil, userStore, nil
-	}
-
 	return credentials, userStore, nil
 }
