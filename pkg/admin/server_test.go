@@ -257,6 +257,227 @@ func TestServer_SetupFlow_RejectsInvalidInput(t *testing.T) {
 	_ = resp.Body.Close()
 }
 
+func TestServer_SetupFlow_PasswordMismatch(t *testing.T) {
+	logger := zerolog.New(io.Discard)
+	s := New(&Config{
+		Credentials: credential.NewStaticCredentialStore(),
+		UserStore:   credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
+		AdminStore:  NewBoltAdminStore(filepath.Join(t.TempDir(), "admin.db")),
+		Logger:      &logger,
+	})
+
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	resp, err := http.PostForm(ts.URL+"/admin/setup", url.Values{
+		"username":         {"admin"},
+		"password":         {"password123"},
+		"confirm_password": {"password456"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	_ = resp.Body.Close()
+}
+
+func TestServer_SetupFlow_InvalidUsername(t *testing.T) {
+	logger := zerolog.New(io.Discard)
+	s := New(&Config{
+		Credentials: credential.NewStaticCredentialStore(),
+		UserStore:   credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
+		AdminStore:  NewBoltAdminStore(filepath.Join(t.TempDir(), "admin.db")),
+		Logger:      &logger,
+	})
+
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	testCases := []string{
+		"a",                     // too short
+		"admin:user",            // colon not allowed
+		"admin user",            // space not allowed
+		"admin/user",            // slash not allowed
+		strings.Repeat("a", 65), // too long
+	}
+
+	for _, username := range testCases {
+		resp, err := http.PostForm(ts.URL+"/admin/setup", url.Values{
+			"username":         {username},
+			"password":         {"validpass123"},
+			"confirm_password": {"validpass123"},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "username %q should be rejected", username)
+		_ = resp.Body.Close()
+	}
+}
+
+func TestServer_SetupFlow_ShortPassword(t *testing.T) {
+	logger := zerolog.New(io.Discard)
+	s := New(&Config{
+		Credentials: credential.NewStaticCredentialStore(),
+		UserStore:   credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
+		AdminStore:  NewBoltAdminStore(filepath.Join(t.TempDir(), "admin.db")),
+		Logger:      &logger,
+	})
+
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	resp, err := http.PostForm(ts.URL+"/admin/setup", url.Values{
+		"username":         {"admin"},
+		"password":         {"1234567"},
+		"confirm_password": {"1234567"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	_ = resp.Body.Close()
+}
+
+func TestServer_SetupFlow_PreventDoubleSetup(t *testing.T) {
+	logger := zerolog.New(io.Discard)
+	credentials := credential.NewStaticCredentialStore()
+	dbPath := filepath.Join(t.TempDir(), "data.db")
+
+	s := New(&Config{
+		Credentials: credentials,
+		UserStore:   credential.NewBoltStore(dbPath),
+		AdminStore:  NewBoltAdminStore(dbPath),
+		Logger:      &logger,
+	})
+
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	jar, err := cookiejar.New(nil)
+	require.NoError(t, err)
+	client := &http.Client{Jar: jar}
+
+	// First setup
+	resp, err := client.PostForm(ts.URL+"/admin/setup", url.Values{
+		"username":         {"admin"},
+		"password":         {"password123"},
+		"confirm_password": {"password123"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	_ = resp.Body.Close()
+
+	// Second setup attempt should redirect to users (already configured and authenticated)
+	// Use non-following client to catch the redirect
+	noFollow := &http.Client{
+		Jar: jar,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	resp, err = noFollow.PostForm(ts.URL+"/admin/setup", url.Values{
+		"username":         {"attacker"},
+		"password":         {"password123"},
+		"confirm_password": {"password123"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
+	assert.Equal(t, "/admin/users", resp.Header.Get("Location"))
+	_ = resp.Body.Close()
+}
+
+func TestServer_SetupFlow_GetShowsForm(t *testing.T) {
+	logger := zerolog.New(io.Discard)
+	s := New(&Config{
+		Credentials: credential.NewStaticCredentialStore(),
+		UserStore:   credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
+		AdminStore:  NewBoltAdminStore(filepath.Join(t.TempDir(), "admin.db")),
+		Logger:      &logger,
+	})
+
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/admin/setup")
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+
+	// Check form fields are present
+	bodyStr := string(body)
+	assert.Contains(t, bodyStr, "username")
+	assert.Contains(t, bodyStr, "password")
+	assert.Contains(t, bodyStr, "confirm_password")
+}
+
+func TestServer_SetupFlow_RedirectWhenAlreadyConfigured(t *testing.T) {
+	logger := zerolog.New(io.Discard)
+	s := New(&Config{
+		Credentials: credential.NewStaticCredentialStore(),
+		UserStore:   credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
+		AdminStore:  newSeededAdminStore(t, "admin", "secret"),
+		Logger:      &logger,
+	})
+
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	noFollow := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+
+	// GET /admin/setup when admin exists should redirect to login
+	resp, err := noFollow.Get(ts.URL + "/admin/setup")
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
+	assert.Equal(t, "/admin/login", resp.Header.Get("Location"))
+	_ = resp.Body.Close()
+}
+
+func TestServer_LoginRedirectsToSetupWhenNoAdmin(t *testing.T) {
+	logger := zerolog.New(io.Discard)
+	s := New(&Config{
+		Credentials: credential.NewStaticCredentialStore(),
+		UserStore:   credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
+		AdminStore:  NewBoltAdminStore(filepath.Join(t.TempDir(), "admin.db")),
+		Logger:      &logger,
+	})
+
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	noFollow := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+
+	resp, err := noFollow.Get(ts.URL + "/admin/login")
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
+	assert.Equal(t, "/admin/setup", resp.Header.Get("Location"))
+	_ = resp.Body.Close()
+}
+
+func TestServer_IndexRedirectsToSetupWhenNoAdmin(t *testing.T) {
+	logger := zerolog.New(io.Discard)
+	s := New(&Config{
+		Credentials: credential.NewStaticCredentialStore(),
+		UserStore:   credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
+		AdminStore:  NewBoltAdminStore(filepath.Join(t.TempDir(), "admin.db")),
+		Logger:      &logger,
+	})
+
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	noFollow := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+
+	resp, err := noFollow.Get(ts.URL + "/admin")
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
+	assert.Equal(t, "/admin/setup", resp.Header.Get("Location"))
+	_ = resp.Body.Close()
+}
+
 func TestGeneratePassword(t *testing.T) {
 	password, err := generatePassword(20)
 	assert.NoError(t, err)
@@ -941,6 +1162,82 @@ func TestServer_OriginPolicy_BadReferer(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	_ = resp.Body.Close()
+}
+
+type stubTrafficStore struct {
+	saved map[string]traffic.UserTotals
+	err   error
+}
+
+func (s *stubTrafficStore) LoadTraffic() (map[string]traffic.UserTotals, error) {
+	return nil, nil
+}
+
+func (s *stubTrafficStore) SaveTraffic(totals map[string]traffic.UserTotals) error {
+	s.saved = totals
+	return s.err
+}
+
+func (s *stubTrafficStore) ResetUserTraffic(username string) error {
+	return nil
+}
+
+func TestFormatBytesAndRate(t *testing.T) {
+	assert.Equal(t, "0 B", formatBytes(0))
+	assert.Equal(t, "1023 B", formatBytes(1023))
+	assert.Equal(t, "1.00 KB", formatBytes(1024))
+	assert.Equal(t, "1.00 MB", formatBytes(1024*1024))
+	assert.Equal(t, "1.00 GB", formatBytes(1024*1024*1024))
+	assert.Equal(t, "1.00 KB/s", formatByteRate(1024))
+}
+
+func TestFormatStartedAgoVariants(t *testing.T) {
+	assert.Equal(t, "unknown", formatStartedAgo(time.Time{}))
+	assert.Equal(t, "just now", formatStartedAgo(time.Now().Add(-30*time.Second)))
+	assert.Equal(t, "5 minutes ago", formatStartedAgo(time.Now().Add(-5*time.Minute)))
+	assert.Equal(t, "2 hours ago", formatStartedAgo(time.Now().Add(-2*time.Hour)))
+	assert.Equal(t, "3 days ago", formatStartedAgo(time.Now().Add(-72*time.Hour)))
+}
+
+func TestServer_PersistTraffic(t *testing.T) {
+	tracker := traffic.NewTracker()
+	store := &stubTrafficStore{}
+
+	s := New(&Config{
+		Credentials:  credential.NewStaticCredentialStore(),
+		AdminStore:   newSeededAdminStore(t, "admin", "secret"),
+		TrafficStore: store,
+		Tracker:      tracker,
+	})
+
+	// No active sessions means empty totals map should still be persisted.
+	err := s.persistTraffic()
+	assert.NoError(t, err)
+	assert.NotNil(t, store.saved)
+}
+
+func TestServer_PersistTraffic_NoStoreOrTracker(t *testing.T) {
+	s := New(&Config{
+		Credentials: credential.NewStaticCredentialStore(),
+		AdminStore:  newSeededAdminStore(t, "admin", "secret"),
+	})
+
+	assert.NoError(t, s.persistTraffic())
+}
+
+func TestServer_PersistTraffic_SaveError(t *testing.T) {
+	tracker := traffic.NewTracker()
+	store := &stubTrafficStore{err: assert.AnError}
+
+	s := New(&Config{
+		Credentials:  credential.NewStaticCredentialStore(),
+		AdminStore:   newSeededAdminStore(t, "admin", "secret"),
+		TrafficStore: store,
+		Tracker:      tracker,
+	})
+
+	err := s.persistTraffic()
+	assert.ErrorIs(t, err, assert.AnError)
 }
 
 func extractGeneratedPassword(t *testing.T, content string) string {

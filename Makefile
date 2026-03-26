@@ -6,12 +6,12 @@ install-go-test-coverage:
 
 .PHONY: check-coverage
 check-coverage: install-go-test-coverage
-	env -u GOCOVERDIR go test ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./...
+	env -u GOCOVERDIR go test ./... -coverprofile=./cover.out -covermode=atomic
 	env -u GOCOVERDIR ${GOBIN}/go-test-coverage --config=./.testcoverage.yml
 
 .PHONY: coverage-only
 coverage-only:
-	env -u GOCOVERDIR go test ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./...
+	env -u GOCOVERDIR go test ./... -coverprofile=./cover.out -covermode=atomic
 
 clean:
 	@echo "Cleaning up dist directory..."

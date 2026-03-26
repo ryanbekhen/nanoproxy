@@ -213,6 +213,12 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		s.renderTemplate(w, "setup.gohtml", setupViewData{}, http.StatusOK)
 	case http.MethodPost:
+		// Check again if admin already configured (prevent double setup)
+		if s.hasConfiguredAdminCredentials() {
+			http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+			return
+		}
+
 		if err := s.verifyOrigin(r); err != nil {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return

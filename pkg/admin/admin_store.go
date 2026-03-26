@@ -3,7 +3,6 @@ package admin
 import (
 	"errors"
 	"os"
-	"path/filepath"
 
 	"go.etcd.io/bbolt"
 )
@@ -67,13 +66,6 @@ func (b *BoltAdminStore) Load() (string, string, bool, error) {
 func (b *BoltAdminStore) Save(username string, passwordHash string) error {
 	if b == nil || b.path == "" {
 		return nil
-	}
-
-	dir := filepath.Dir(b.path)
-	if dir != "." {
-		if err := os.MkdirAll(dir, 0o750); err != nil {
-			return err
-		}
 	}
 
 	db, err := bbolt.Open(b.path, 0o600, nil)
