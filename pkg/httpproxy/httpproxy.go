@@ -129,15 +129,21 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Proxy authentication required or unauthorized", http.StatusProxyAuthRequired)
 		return
 	}
+	requestLogger = requestLogger.With().Str("username", username).Str("dest_addr", r.Host).Logger()
+	if s.config.Credentials != nil {
+		requestLogger.Debug().Msg("proxy authentication succeeded")
+	} else {
+		requestLogger.Debug().Msg("connect request accepted without authentication")
+	}
 	session := s.startSession(username, r.RemoteAddr)
 	defer session.Close()
 
 	startTime := time.Now()
+	requestLogger.Debug().Msg("dialing connect target")
 	serverConn, err := s.config.Dial("tcp", r.Host)
 	latency := time.Since(startTime).Milliseconds()
 	if err != nil {
 		requestLogger.Error().
-			Str("dest_addr", r.Host).
 			Str("latency", fmt.Sprintf("%dms", latency)).
 			Err(err).
 			Msg("connect failed")
@@ -168,6 +174,12 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 	n, _ := io.Copy(clientConn, serverConn)
 	session.AddDownload(n)
 	<-uploadCh
+
+	requestLogger.Info().
+		Str("latency", time.Since(startTime).Round(time.Millisecond).String()).
+		Uint64("upload_bytes", session.UploadBytes()).
+		Uint64("download_bytes", session.DownloadBytes()).
+		Msg("connect completed")
 }
 
 func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
@@ -180,6 +192,12 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Proxy-Authenticate", "Basic realm=\"Restricted area\"")
 		http.Error(w, "Proxy authentication required or unauthorized", http.StatusProxyAuthRequired)
 		return
+	}
+	requestLogger = requestLogger.With().Str("username", username).Logger()
+	if s.config.Credentials != nil {
+		requestLogger.Debug().Msg("proxy authentication succeeded")
+	} else {
+		requestLogger.Debug().Msg("http request accepted without authentication")
 	}
 	session := s.startSession(username, r.RemoteAddr)
 	defer session.Close()
@@ -195,6 +213,7 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid target URL", http.StatusBadRequest)
 		return
 	}
+	requestLogger = requestLogger.With().Str("dest_addr", targetURL.String()).Logger()
 
 	proxyReqBody := &countingReadCloser{
 		ReadCloser: r.Body,
@@ -207,19 +226,18 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		latency := time.Since(startTime).Milliseconds()
 		requestLogger.Error().
-			Str("dest_addr", targetURL.String()).
 			Str("latency", fmt.Sprintf("%dms", latency)).
 			Err(err).
 			Msg("failed to resolve target host")
 		http.Error(w, "Bad gateway: failed to resolve target host", http.StatusBadGateway)
 		return
 	}
+	requestLogger.Debug().Str("resolved_addr", resolvedAddr).Msg("resolved proxy target")
 
 	serverConn, err := dialProxyTarget(targetURL, resolvedAddr, s.config.Dial, s.config.ClientConnTimeout)
 	if err != nil {
 		latency := time.Since(startTime).Milliseconds()
 		requestLogger.Error().
-			Str("dest_addr", targetURL.String()).
 			Str("latency", fmt.Sprintf("%dms", latency)).
 			Err(err).
 			Msg("failed to connect to target")
@@ -229,10 +247,10 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	defer serverConn.Close()
 
 	proxyReq := buildOutboundProxyRequest(r, targetURL, proxyReqBody)
+	requestLogger.Debug().Msg("forwarding proxy request")
 	if err := proxyReq.Write(serverConn); err != nil {
 		latency := time.Since(startTime).Milliseconds()
 		requestLogger.Error().
-			Str("dest_addr", targetURL.String()).
 			Str("latency", fmt.Sprintf("%dms", latency)).
 			Err(err).
 			Msg("failed to send request")
@@ -244,7 +262,6 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	latency := time.Since(startTime).Milliseconds()
 	if err != nil {
 		requestLogger.Error().
-			Str("dest_addr", targetURL.String()).
 			Str("latency", fmt.Sprintf("%dms", latency)).
 			Err(err).
 			Msg("failed to read response")
@@ -266,6 +283,13 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 	n, _ := io.Copy(w, resp.Body)
 	session.AddDownload(n)
+
+	requestLogger.Info().
+		Int("status_code", resp.StatusCode).
+		Str("latency", time.Since(startTime).Round(time.Millisecond).String()).
+		Uint64("upload_bytes", session.UploadBytes()).
+		Uint64("download_bytes", session.DownloadBytes()).
+		Msg("request completed")
 }
 
 func (s *Server) startSession(username, remoteAddr string) *traffic.Session {

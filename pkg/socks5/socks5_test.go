@@ -14,8 +14,79 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/ryanbekhen/nanoproxy/pkg/credential"
 	"github.com/ryanbekhen/nanoproxy/pkg/resolver"
+	"github.com/ryanbekhen/nanoproxy/pkg/traffic"
 	"github.com/stretchr/testify/assert"
 )
+
+type resolverFunc func(host string) (net.IP, error)
+
+func (f resolverFunc) Resolve(host string) (net.IP, error) {
+	return f(host)
+}
+
+func parseJSONLogLines(t *testing.T, buf *bytes.Buffer) []map[string]interface{} {
+	t.Helper()
+
+	content := bytes.TrimSpace(buf.Bytes())
+	if len(content) == 0 {
+		return nil
+	}
+
+	lines := bytes.Split(content, []byte("\n"))
+	entries := make([]map[string]interface{}, 0, len(lines))
+	for _, line := range lines {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+		entry := map[string]interface{}{}
+		if err := json.Unmarshal(line, &entry); err != nil {
+			t.Fatalf("failed to parse log entry: %v", err)
+		}
+		entries = append(entries, entry)
+	}
+
+	return entries
+}
+
+func parseLastJSONLogLine(t *testing.T, buf *bytes.Buffer) map[string]interface{} {
+	t.Helper()
+
+	entries := parseJSONLogLines(t, buf)
+	if len(entries) == 0 {
+		t.Fatal("expected log output")
+	}
+
+	return entries[len(entries)-1]
+}
+
+// testHandleConnect wraps handleConnect for tests that use the old signature
+func (s *Server) testHandleConnect(conn net.Conn, req *Request) error {
+	tracker := traffic.NewTracker()
+	session := tracker.Start("test", "127.0.0.1")
+	defer session.Close()
+	logger := zerolog.New(io.Discard)
+	reqLogger := logger.With().
+		Str("protocol", "socks5").
+		Str("command", req.Command.String()).
+		Str("dest_addr", req.DestAddr.String()).
+		Logger()
+	return s.handleConnect(conn, req, session, reqLogger)
+}
+
+// testHandleRequest wraps handleRequest for tests that use the old signature
+func (s *Server) testHandleRequest(req *Request, conn net.Conn) error {
+	tracker := traffic.NewTracker()
+	session := tracker.Start("test", "127.0.0.1")
+	defer session.Close()
+	logger := zerolog.New(io.Discard)
+	reqLogger := logger.With().
+		Str("protocol", "socks5").
+		Str("command", req.Command.String()).
+		Str("dest_addr", req.DestAddr.String()).
+		Logger()
+	return s.handleRequest(req, conn, session, reqLogger)
+}
 
 func TestNew(t *testing.T) {
 	conf := &Config{
@@ -221,9 +292,7 @@ func TestHandleConnection_LogsStructuredAuthFailure(t *testing.T) {
 		t.Fatal("timed out waiting for connection handler")
 	}
 
-	entry := map[string]interface{}{}
-	err = json.Unmarshal(bytes.TrimSpace(logBuf.Bytes()), &entry)
-	assert.NoError(t, err)
+	entry := parseLastJSONLogLine(t, &logBuf)
 	assert.Equal(t, "proxy authentication failed", entry["message"])
 	assert.Equal(t, "socks5", entry["protocol"])
 	assert.Equal(t, "invalid credentials", entry["error"])
@@ -262,9 +331,7 @@ func TestHandleConnection_LogsClientAddrForUnsupportedVersion(t *testing.T) {
 		t.Fatal("timed out waiting for connection handler")
 	}
 
-	entry := map[string]interface{}{}
-	err = json.Unmarshal(bytes.TrimSpace(logBuf.Bytes()), &entry)
-	assert.NoError(t, err)
+	entry := parseLastJSONLogLine(t, &logBuf)
 	assert.Equal(t, "unsupported version", entry["message"])
 	assert.Equal(t, "socks5", entry["protocol"])
 	assert.Equal(t, float64(4), entry["version"])
@@ -314,9 +381,7 @@ func TestHandleConnection_LogsRequestFailureContext(t *testing.T) {
 		t.Fatal("timed out waiting for connection handler")
 	}
 
-	entry := map[string]interface{}{}
-	err = json.Unmarshal(bytes.TrimSpace(logBuf.Bytes()), &entry)
-	assert.NoError(t, err)
+	entry := parseLastJSONLogLine(t, &logBuf)
 	assert.Equal(t, "request failed", entry["message"])
 	assert.Equal(t, "socks5", entry["protocol"])
 	assert.Equal(t, "unknown", entry["command"])
@@ -326,6 +391,146 @@ func TestHandleConnection_LogsRequestFailureContext(t *testing.T) {
 	clientAddr, ok := entry["client_addr"].(string)
 	assert.True(t, ok)
 	assert.NotEmpty(t, clientAddr)
+}
+
+func TestHandleConnection_LogsSuccessfulRequestAtInfo(t *testing.T) {
+	backend, err := net.Listen("tcp", "127.0.0.1:0")
+	assert.NoError(t, err)
+	defer backend.Close()
+
+	go func() {
+		conn, acceptErr := backend.Accept()
+		assert.NoError(t, acceptErr)
+		if acceptErr != nil {
+			return
+		}
+		defer conn.Close()
+
+		buf := make([]byte, 4)
+		_, _ = io.ReadFull(conn, buf)
+		_, _ = conn.Write([]byte("pong"))
+	}()
+
+	var logBuf bytes.Buffer
+	logger := zerolog.New(&logBuf).Level(zerolog.InfoLevel)
+	server := New(&Config{
+		Authentication: []Authenticator{&NoAuthAuthenticator{}},
+		Logger:         &logger,
+		Tracker:        traffic.NewTracker(),
+	})
+
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		server.handleConnection(serverConn)
+	}()
+
+	backendAddr := backend.Addr().(*net.TCPAddr)
+	request := bytes.NewBuffer(nil)
+	request.Write([]byte{Version})
+	request.Write([]byte{1, NoAuth.Uint8()})
+	request.Write([]byte{Version, CommandConnect.Uint8(), 0, AddressTypeIPv4.Uint8()})
+	request.Write([]byte{127, 0, 0, 1})
+	port := []byte{0, 0}
+	binary.BigEndian.PutUint16(port, uint16(backendAddr.Port))
+	request.Write(port)
+	request.Write([]byte("ping"))
+
+	_, err = clientConn.Write(request.Bytes())
+	assert.NoError(t, err)
+
+	response := make([]byte, 16)
+	_, err = io.ReadFull(clientConn, response)
+	assert.NoError(t, err)
+	_ = clientConn.Close()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for connection handler")
+	}
+
+	entry := parseLastJSONLogLine(t, &logBuf)
+	assert.Equal(t, "request completed", entry["message"])
+	assert.Equal(t, "info", entry["level"])
+	assert.Equal(t, "socks5", entry["protocol"])
+	assert.Equal(t, "connect", entry["command"])
+	assert.Equal(t, "anonymous", entry["username"])
+	assert.Equal(t, fmt.Sprintf("127.0.0.1:%d", backendAddr.Port), entry["dest_addr"])
+	assert.NotEmpty(t, entry["latency"])
+	assert.Equal(t, float64(4), entry["upload_bytes"])
+	assert.Equal(t, float64(4), entry["download_bytes"])
+}
+
+func TestHandleConnection_LogsSuccessfulRequestDetailsAtDebug(t *testing.T) {
+	backend, err := net.Listen("tcp", "127.0.0.1:0")
+	assert.NoError(t, err)
+	defer backend.Close()
+
+	go func() {
+		conn, acceptErr := backend.Accept()
+		assert.NoError(t, acceptErr)
+		if acceptErr != nil {
+			return
+		}
+		defer conn.Close()
+		_, _ = io.Copy(io.Discard, conn)
+	}()
+
+	var logBuf bytes.Buffer
+	logger := zerolog.New(&logBuf).Level(zerolog.DebugLevel)
+	server := New(&Config{
+		Authentication: []Authenticator{&NoAuthAuthenticator{}},
+		Logger:         &logger,
+		Tracker:        traffic.NewTracker(),
+		Resolver: resolverFunc(func(host string) (net.IP, error) {
+			return net.ParseIP("127.0.0.1"), nil
+		}),
+	})
+
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		server.handleConnection(serverConn)
+	}()
+
+	backendAddr := backend.Addr().(*net.TCPAddr)
+	request := bytes.NewBuffer(nil)
+	request.Write([]byte{Version})
+	request.Write([]byte{1, NoAuth.Uint8()})
+	request.Write([]byte{Version, CommandConnect.Uint8(), 0, AddressTypeDomain.Uint8(), 17})
+	request.WriteString("debug-target.test")
+	port := []byte{0, 0}
+	binary.BigEndian.PutUint16(port, uint16(backendAddr.Port))
+	request.Write(port)
+
+	_, err = clientConn.Write(request.Bytes())
+	assert.NoError(t, err)
+
+	response := make([]byte, 12)
+	_, err = io.ReadFull(clientConn, response)
+	assert.NoError(t, err)
+	_ = clientConn.Close()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for connection handler")
+	}
+
+	entries := parseJSONLogLines(t, &logBuf)
+	assert.GreaterOrEqual(t, len(entries), 4)
+	assert.Equal(t, "connection accepted without authentication", entries[0]["message"])
+	assert.Equal(t, "request received", entries[1]["message"])
+	assert.Equal(t, "resolved destination address", entries[2]["message"])
+	assert.Equal(t, "127.0.0.1", entries[2]["resolved_ip"])
+	assert.Equal(t, "dialing destination", entries[3]["message"])
 }
 
 func TestListenAndServe_InvalidAuthType(t *testing.T) {
@@ -456,7 +661,7 @@ func TestRequest_Unreachable(t *testing.T) {
 	assert.NoError(t, err)
 
 	req.realAddr = req.DestAddr
-	err = s.handleConnect(resp, req, nil)
+	err = s.testHandleConnect(resp, req)
 	assert.Error(t, err)
 
 	out := resp.buf.Bytes()
@@ -495,7 +700,7 @@ func TestRequest_Refused(t *testing.T) {
 	assert.NoError(t, err)
 
 	req.realAddr = req.DestAddr
-	err = s.handleConnect(resp, req, nil)
+	err = s.testHandleConnect(resp, req)
 	assert.Error(t, err)
 
 	out := resp.buf.Bytes()
@@ -538,7 +743,7 @@ func TestRequest_NetworkUnreachable(t *testing.T) {
 	assert.NoError(t, err)
 
 	req.realAddr = req.DestAddr
-	err = s.handleConnect(resp, req, nil)
+	err = s.testHandleConnect(resp, req)
 	assert.Error(t, err)
 
 	out := resp.buf.Bytes()
@@ -574,7 +779,7 @@ func TestRequest_CommandNotSupported(t *testing.T) {
 
 	resp := &MockConn{}
 	req, _ := NewRequest(buf)
-	err := s.handleRequest(req, resp, nil)
+	err := s.testHandleRequest(req, resp)
 	assert.Error(t, err)
 
 	out := resp.buf.Bytes()
@@ -655,7 +860,7 @@ func TestHandleRequest_WithResolver(t *testing.T) {
 	req.realAddr = req.DestAddr
 
 	conn := &MockConn{}
-	_ = s.handleRequest(req, conn, nil)
+	_ = s.testHandleRequest(req, conn)
 }
 
 func TestHandleRequest_ResolverError(t *testing.T) {
@@ -671,7 +876,7 @@ func TestHandleRequest_ResolverError(t *testing.T) {
 		DestAddr: &AddrSpec{FQDN: "bad.invalid", Port: 9999},
 	}
 
-	err := s.handleRequest(req, conn, nil)
+	err := s.testHandleRequest(req, conn)
 	assert.Error(t, err)
 }
 
@@ -705,7 +910,7 @@ func TestHandleRequest_WithRewriter(t *testing.T) {
 	assert.NoError(t, err)
 	req.realAddr = req.DestAddr
 	// connection refused is expected — we just want to cover the Rewriter path
-	_ = s.handleRequest(req, conn, nil)
+	_ = s.testHandleRequest(req, conn)
 }
 
 type mockRewriter struct{}

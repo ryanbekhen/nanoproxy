@@ -57,6 +57,32 @@ type Session struct {
 	once    sync.Once
 }
 
+func (s *Session) UploadBytes() uint64 {
+	if s == nil || s.tracker == nil {
+		return 0
+	}
+	s.tracker.mu.Lock()
+	state := s.tracker.sessions[s.id]
+	s.tracker.mu.Unlock()
+	if state == nil {
+		return 0
+	}
+	return state.uploadBytes.Load()
+}
+
+func (s *Session) DownloadBytes() uint64 {
+	if s == nil || s.tracker == nil {
+		return 0
+	}
+	s.tracker.mu.Lock()
+	state := s.tracker.sessions[s.id]
+	s.tracker.mu.Unlock()
+	if state == nil {
+		return 0
+	}
+	return state.downloadBytes.Load()
+}
+
 func NewTracker() *Tracker {
 	return &Tracker{
 		sessions: make(map[string]*sessionState),

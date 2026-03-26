@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/ryanbekhen/nanoproxy/pkg/traffic"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -88,17 +89,38 @@ func (m *MockHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 func parseJSONLogLine(t *testing.T, buf *bytes.Buffer) map[string]interface{} {
 	t.Helper()
 
-	line := strings.TrimSpace(buf.String())
-	if line == "" {
+	entries := parseJSONLogLines(t, buf)
+	if len(entries) == 0 {
 		t.Fatal("expected log output")
 	}
 
-	entry := map[string]interface{}{}
-	if err := json.Unmarshal([]byte(line), &entry); err != nil {
-		t.Fatalf("failed to parse log entry: %v", err)
+	return entries[len(entries)-1]
+}
+
+func parseJSONLogLines(t *testing.T, buf *bytes.Buffer) []map[string]interface{} {
+	t.Helper()
+
+	content := strings.TrimSpace(buf.String())
+	if content == "" {
+		return nil
 	}
 
-	return entry
+	lines := strings.Split(content, "\n")
+	entries := make([]map[string]interface{}, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		entry := map[string]interface{}{}
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatalf("failed to parse log entry: %v", err)
+		}
+		entries = append(entries, entry)
+	}
+
+	return entries
 }
 
 func TestServer_ServeHTTP(t *testing.T) {
@@ -280,6 +302,79 @@ func TestServer_HandleCONNECT_LogsStructuredDialFailure(t *testing.T) {
 	assert.Equal(t, "dial failed", entry["error"])
 	assert.NotEmpty(t, entry["latency"])
 	assert.Equal(t, "error", entry["level"])
+}
+
+func TestServer_HandleHTTP_LogsStructuredSuccessAtInfo(t *testing.T) {
+	targetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer targetServer.Close()
+
+	var logBuf bytes.Buffer
+	logger := zerolog.New(&logBuf).Level(zerolog.InfoLevel)
+	server := New(&Config{
+		Logger:            &logger,
+		Dial:              net.Dial,
+		Tracker:           traffic.NewTracker(),
+		ClientConnTimeout: 2 * time.Second,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, targetServer.URL, nil)
+	req.RemoteAddr = "202.65.229.173:51655"
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	entry := parseJSONLogLine(t, &logBuf)
+	assert.Equal(t, "request completed", entry["message"])
+	assert.Equal(t, "info", entry["level"])
+	assert.Equal(t, "http", entry["protocol"])
+	assert.Equal(t, http.MethodGet, entry["http_method"])
+	assert.Equal(t, "anonymous", entry["username"])
+	assert.Equal(t, float64(http.StatusOK), entry["status_code"])
+	assert.NotEmpty(t, entry["latency"])
+	assert.Equal(t, float64(0), entry["upload_bytes"])
+	assert.Equal(t, float64(2), entry["download_bytes"])
+}
+
+func TestServer_HandleHTTP_LogsDebugResolutionDetails(t *testing.T) {
+	targetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer targetServer.Close()
+
+	targetURL, err := url.Parse(targetServer.URL)
+	assert.NoError(t, err)
+	fakeTargetURL := "http://debug-target.test:" + targetURL.Port() + "/"
+
+	var logBuf bytes.Buffer
+	logger := zerolog.New(&logBuf).Level(zerolog.DebugLevel)
+	server := New(&Config{
+		Logger:  &logger,
+		Dial:    net.Dial,
+		Tracker: traffic.NewTracker(),
+		Resolver: resolverFunc(func(host string) (net.IP, error) {
+			return net.ParseIP(targetURL.Hostname()), nil
+		}),
+		ClientConnTimeout: 2 * time.Second,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, fakeTargetURL, nil)
+	req.RemoteAddr = "202.65.229.173:51655"
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+	entries := parseJSONLogLines(t, &logBuf)
+	assert.GreaterOrEqual(t, len(entries), 3)
+	assert.Equal(t, "http request accepted without authentication", entries[0]["message"])
+	assert.Equal(t, "debug", entries[0]["level"])
+	assert.Equal(t, "resolved proxy target", entries[1]["message"])
+	assert.Equal(t, "debug", entries[1]["level"])
+	assert.NotEmpty(t, entries[1]["resolved_addr"])
 }
 
 func TestProxy_ForwardRequests(t *testing.T) {

@@ -144,6 +144,13 @@ func (s *Server) handleConnection(conn net.Conn) {
 		}
 		return
 	}
+	username := usernameFromAuthContext(authContext)
+	connLogger = connLogger.With().Str("username", username).Logger()
+	if s.config.Credentials != nil {
+		connLogger.Debug().Msg("proxy authentication succeeded")
+	} else {
+		connLogger.Debug().Msg("connection accepted without authentication")
+	}
 
 	request, err := NewRequest(connectionBuffer)
 	if err != nil {
@@ -161,6 +168,11 @@ func (s *Server) handleConnection(conn net.Conn) {
 		return
 	}
 	request.AuthContext = authContext
+	requestLogger := connLogger.With().
+		Str("command", request.Command.String()).
+		Str("dest_addr", request.DestAddr.String()).
+		Logger()
+	requestLogger.Debug().Msg("request received")
 	trafficSession := s.startTrafficSession(authContext, conn)
 	defer trafficSession.Close()
 
@@ -168,13 +180,17 @@ func (s *Server) handleConnection(conn net.Conn) {
 		request.RemoteAddr = &AddrSpec{IP: clientAddr.IP, Port: clientAddr.Port}
 	}
 
-	if err := s.handleRequest(request, conn, trafficSession); err != nil &&
+	if err := s.handleRequest(request, conn, trafficSession, requestLogger); err != nil &&
 		shouldLogRequestError(err) {
-		connLogger.Error().
-			Str("command", request.Command.String()).
-			Str("dest_addr", request.DestAddr.String()).
+		requestLogger.Error().
 			Err(err).
 			Msg("request failed")
+	} else if err == nil {
+		requestLogger.Info().
+			Str("latency", request.Latency.Round(time.Millisecond).String()).
+			Uint64("upload_bytes", trafficSession.UploadBytes()).
+			Uint64("download_bytes", trafficSession.DownloadBytes()).
+			Msg("request completed")
 	}
 
 	if s.config.AfterRequest != nil {
@@ -200,7 +216,7 @@ func (s *Server) authenticate(conn net.Conn, bufConn *bufio.Reader) (*Context, e
 	return nil, noAcceptable(conn)
 }
 
-func (s *Server) handleRequest(req *Request, conn net.Conn, trafficSession *traffic.Session) error {
+func (s *Server) handleRequest(req *Request, conn net.Conn, trafficSession *traffic.Session, requestLogger zerolog.Logger) error {
 	dest := req.DestAddr
 	if dest.FQDN != "" {
 		addr, err := s.config.Resolver.Resolve(dest.FQDN)
@@ -211,6 +227,7 @@ func (s *Server) handleRequest(req *Request, conn net.Conn, trafficSession *traf
 			return fmt.Errorf("failed to resolve destination: %w", err)
 		}
 		dest.IP = addr
+		requestLogger.Debug().Str("resolved_ip", addr.String()).Msg("resolved destination address")
 	}
 
 	req.realAddr = req.DestAddr
@@ -220,7 +237,7 @@ func (s *Server) handleRequest(req *Request, conn net.Conn, trafficSession *traf
 
 	switch req.Command {
 	case CommandConnect:
-		return s.handleConnect(conn, req, trafficSession)
+		return s.handleConnect(conn, req, trafficSession, requestLogger)
 	// TODO: Implement these
 	//case CommandBind:
 	//	return s.handleBind(conn, req)
@@ -234,7 +251,7 @@ func (s *Server) handleRequest(req *Request, conn net.Conn, trafficSession *traf
 	}
 }
 
-func (s *Server) handleConnect(conn net.Conn, req *Request, trafficSession *traffic.Session) error {
+func (s *Server) handleConnect(conn net.Conn, req *Request, trafficSession *traffic.Session, requestLogger zerolog.Logger) error {
 	dial := s.config.Dial
 	if dial == nil {
 		dial = func(network, addr string) (net.Conn, error) {
@@ -243,6 +260,7 @@ func (s *Server) handleConnect(conn net.Conn, req *Request, trafficSession *traf
 	}
 
 	processStartTimestamp := time.Now()
+	requestLogger.Debug().Msg("dialing destination")
 	dest, err := dial("tcp", req.realAddr.Address())
 	req.Latency = time.Since(processStartTimestamp)
 
@@ -322,6 +340,15 @@ func remoteAddrString(conn net.Conn) string {
 		return ""
 	}
 	return conn.RemoteAddr().String()
+}
+
+func usernameFromAuthContext(authContext *Context) string {
+	if authContext != nil && authContext.Payload != nil {
+		if username := authContext.Payload["Username"]; username != "" {
+			return username
+		}
+	}
+	return "anonymous"
 }
 
 func shouldLogRequestError(err error) bool {
