@@ -36,11 +36,11 @@ func main() {
 		time.Local = loc
 	}
 
-	adminEnabled := cfg.AdminUsername != "" && cfg.AdminPassword != ""
 	credentials, userFileStore, err := buildCredentialStore(cfg)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Failed to initialize credentials")
 	}
+	adminStore := admin.NewBoltAdminStore(cfg.UserStorePath)
 
 	dnsResolver := &resolver.DNSResolver{}
 	trafficTracker := traffic.NewTracker()
@@ -119,55 +119,45 @@ func main() {
 		}
 	}()
 
-	if adminEnabled {
-		adminServer := admin.New(&admin.Config{
-			Credentials:      credentials,
-			UserStore:        userFileStore,
-			TrafficStore:     trafficStore,
-			Tracker:          trafficTracker,
-			AdminUsername:    cfg.AdminUsername,
-			AdminPassword:    cfg.AdminPassword,
-			CookieSecure:     cfg.AdminCookieSecure,
-			MaxLoginAttempts: cfg.AdminMaxLoginAttempts,
-			LoginWindow:      cfg.AdminLoginWindow,
-			LockoutDuration:  cfg.AdminLockoutDuration,
-			AllowedOrigins:   cfg.AdminAllowedOrigins,
-			Logger:           &logger,
-		})
+	adminServer := admin.New(&admin.Config{
+		Credentials:      credentials,
+		UserStore:        userFileStore,
+		AdminStore:       adminStore,
+		TrafficStore:     trafficStore,
+		Tracker:          trafficTracker,
+		CookieSecure:     cfg.AdminCookieSecure,
+		MaxLoginAttempts: cfg.AdminMaxLoginAttempts,
+		LoginWindow:      cfg.AdminLoginWindow,
+		LockoutDuration:  cfg.AdminLockoutDuration,
+		AllowedOrigins:   cfg.AdminAllowedOrigins,
+		Logger:           &logger,
+	})
 
-		go func() {
-			logger.Info().Msgf("Starting admin server on %s", cfg.ADDRAdmin)
+	go func() {
+		logger.Info().Msgf("Starting admin server on %s", cfg.ADDRAdmin)
 
-			server := &http.Server{
-				Addr:         cfg.ADDRAdmin,
-				Handler:      adminServer.Handler(),
-				ReadTimeout:  15 * time.Second,
-				WriteTimeout: 15 * time.Second,
-				IdleTimeout:  60 * time.Second,
-			}
+		server := &http.Server{
+			Addr:         cfg.ADDRAdmin,
+			Handler:      adminServer.Handler(),
+			ReadTimeout:  15 * time.Second,
+			WriteTimeout: 15 * time.Second,
+			IdleTimeout:  60 * time.Second,
+		}
 
-			if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				logger.Fatal().Msg(err.Error())
-			}
-		}()
-	}
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Fatal().Msg(err.Error())
+		}
+	}()
 
 	select {}
 }
 
 func buildCredentialStore(cfg *config.Config) (*credential.StaticCredentialStore, credential.PersistentStore, error) {
-	adminEnabled := cfg.AdminUsername != "" && cfg.AdminPassword != ""
 	userStore := credential.NewBoltStore(cfg.UserStorePath)
 
-	if !adminEnabled && len(cfg.Credentials) == 0 {
-		return nil, userStore, nil
-	}
-
 	credentials := credential.NewStaticCredentialStore()
-	if adminEnabled {
-		if err := credential.LoadInto(userStore, credentials); err != nil {
-			return nil, userStore, fmt.Errorf("load persisted proxy users: %w", err)
-		}
+	if err := credential.LoadInto(userStore, credentials); err != nil {
+		return nil, userStore, fmt.Errorf("load persisted proxy users: %w", err)
 	}
 
 	for _, cred := range cfg.Credentials {
@@ -176,6 +166,10 @@ func buildCredentialStore(cfg *config.Config) (*credential.StaticCredentialStore
 			return nil, userStore, fmt.Errorf("invalid credential: %s", cred)
 		}
 		credentials.SetHashed(credArr[0], credArr[1])
+	}
+
+	if credentials.Count() == 0 {
+		return nil, userStore, nil
 	}
 
 	return credentials, userStore, nil

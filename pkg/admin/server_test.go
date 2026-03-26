@@ -18,7 +18,20 @@ import (
 	"github.com/ryanbekhen/nanoproxy/pkg/traffic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 )
+
+func newSeededAdminStore(t *testing.T, username, password string) AdminCredentialStore {
+	t.Helper()
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	require.NoError(t, err)
+
+	store := NewBoltAdminStore(filepath.Join(t.TempDir(), "admin.db"))
+	require.NoError(t, store.Save(username, string(hash)))
+
+	return store
+}
 
 func TestServer_LoginAndUserManagement(t *testing.T) {
 	logger := zerolog.New(io.Discard)
@@ -26,11 +39,10 @@ func TestServer_LoginAndUserManagement(t *testing.T) {
 	userStore := credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db"))
 
 	s := New(&Config{
-		Credentials:   credentials,
-		UserStore:     userStore,
-		AdminUsername: "admin",
-		AdminPassword: "secret",
-		Logger:        &logger,
+		Credentials: credentials,
+		UserStore:   userStore,
+		AdminStore:  newSeededAdminStore(t, "admin", "secret"),
+		Logger:      &logger,
 	})
 
 	ts := httptest.NewServer(s.Handler())
@@ -152,11 +164,10 @@ func TestServer_LoginRequiresConfiguredCredentials(t *testing.T) {
 	credentials := credential.NewStaticCredentialStore()
 
 	s := New(&Config{
-		Credentials:   credentials,
-		UserStore:     credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
-		AdminUsername: "admin",
-		AdminPassword: "secret",
-		Logger:        &logger,
+		Credentials: credentials,
+		UserStore:   credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
+		AdminStore:  newSeededAdminStore(t, "admin", "secret"),
+		Logger:      &logger,
 	})
 
 	ts := httptest.NewServer(s.Handler())
@@ -165,6 +176,84 @@ func TestServer_LoginRequiresConfiguredCredentials(t *testing.T) {
 	resp, err := http.Post(ts.URL+"/admin/login", "application/x-www-form-urlencoded", strings.NewReader("username=bad&password=bad"))
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	_ = resp.Body.Close()
+}
+
+func TestServer_SetupFlow_CreatesAdminAndPersistsAcrossRestart(t *testing.T) {
+	logger := zerolog.New(io.Discard)
+	credentials := credential.NewStaticCredentialStore()
+	dbPath := filepath.Join(t.TempDir(), "data.db")
+
+	s := New(&Config{
+		Credentials: credentials,
+		UserStore:   credential.NewBoltStore(dbPath),
+		AdminStore:  NewBoltAdminStore(dbPath),
+		Logger:      &logger,
+	})
+
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	jar, err := cookiejar.New(nil)
+	require.NoError(t, err)
+	client := &http.Client{Jar: jar}
+
+	resp, err := client.Get(ts.URL + "/admin/login")
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "/admin/setup", resp.Request.URL.Path)
+	_ = resp.Body.Close()
+
+	resp, err = client.PostForm(ts.URL+"/admin/setup", url.Values{
+		"username":         {"admin"},
+		"password":         {"super-secret"},
+		"confirm_password": {"super-secret"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "/admin/users", resp.Request.URL.Path)
+	_ = resp.Body.Close()
+
+	restarted := New(&Config{
+		Credentials: credential.NewStaticCredentialStore(),
+		UserStore:   credential.NewBoltStore(dbPath),
+		AdminStore:  NewBoltAdminStore(dbPath),
+		Logger:      &logger,
+	})
+
+	tsRestarted := httptest.NewServer(restarted.Handler())
+	defer tsRestarted.Close()
+
+	noFollow := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+
+	resp, err = noFollow.Post(tsRestarted.URL+"/admin/login", "application/x-www-form-urlencoded", strings.NewReader("username=admin&password=super-secret"))
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
+	assert.Equal(t, "/admin/users", resp.Header.Get("Location"))
+	_ = resp.Body.Close()
+}
+
+func TestServer_SetupFlow_RejectsInvalidInput(t *testing.T) {
+	logger := zerolog.New(io.Discard)
+	s := New(&Config{
+		Credentials: credential.NewStaticCredentialStore(),
+		UserStore:   credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
+		AdminStore:  NewBoltAdminStore(filepath.Join(t.TempDir(), "admin.db")),
+		Logger:      &logger,
+	})
+
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	resp, err := http.PostForm(ts.URL+"/admin/setup", url.Values{
+		"username":         {"ad"},
+		"password":         {"short"},
+		"confirm_password": {"short"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	_ = resp.Body.Close()
 }
 
@@ -182,11 +271,10 @@ func TestServer_CreateUserRejectsInvalidUsername(t *testing.T) {
 	credentials := credential.NewStaticCredentialStore()
 
 	s := New(&Config{
-		Credentials:   credentials,
-		UserStore:     credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
-		AdminUsername: "admin",
-		AdminPassword: "secret",
-		Logger:        &logger,
+		Credentials: credentials,
+		UserStore:   credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
+		AdminStore:  newSeededAdminStore(t, "admin", "secret"),
+		Logger:      &logger,
 	})
 
 	ts := httptest.NewServer(s.Handler())
@@ -227,11 +315,10 @@ func TestServer_StateChangingRoutesRequireCSRF(t *testing.T) {
 	credentials := credential.NewStaticCredentialStore()
 
 	s := New(&Config{
-		Credentials:   credentials,
-		UserStore:     credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
-		AdminUsername: "admin",
-		AdminPassword: "secret",
-		Logger:        &logger,
+		Credentials: credentials,
+		UserStore:   credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
+		AdminStore:  newSeededAdminStore(t, "admin", "secret"),
+		Logger:      &logger,
 	})
 
 	ts := httptest.NewServer(s.Handler())
@@ -256,11 +343,10 @@ func TestServer_CSRFTokenRotationRejectsOldToken(t *testing.T) {
 	credentials := credential.NewStaticCredentialStore()
 
 	s := New(&Config{
-		Credentials:   credentials,
-		UserStore:     credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
-		AdminUsername: "admin",
-		AdminPassword: "secret",
-		Logger:        &logger,
+		Credentials: credentials,
+		UserStore:   credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
+		AdminStore:  newSeededAdminStore(t, "admin", "secret"),
+		Logger:      &logger,
 	})
 
 	ts := httptest.NewServer(s.Handler())
@@ -304,8 +390,7 @@ func TestServer_OriginPolicy(t *testing.T) {
 	s := New(&Config{
 		Credentials:    credentials,
 		UserStore:      credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
-		AdminUsername:  "admin",
-		AdminPassword:  "secret",
+		AdminStore:     newSeededAdminStore(t, "admin", "secret"),
 		AllowedOrigins: []string{"http://allowed.local"},
 		Logger:         &logger,
 	})
@@ -361,11 +446,10 @@ func newAdminServer(t *testing.T) (*Server, *httptest.Server) {
 	logger := zerolog.New(io.Discard)
 	creds := credential.NewStaticCredentialStore()
 	s := New(&Config{
-		Credentials:   creds,
-		UserStore:     credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
-		AdminUsername: "admin",
-		AdminPassword: "secret",
-		Logger:        &logger,
+		Credentials: creds,
+		UserStore:   credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
+		AdminStore:  newSeededAdminStore(t, "admin", "secret"),
+		Logger:      &logger,
 	})
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(ts.Close)
@@ -375,10 +459,9 @@ func newAdminServer(t *testing.T) (*Server, *httptest.Server) {
 func TestServer_NilLogger(t *testing.T) {
 	creds := credential.NewStaticCredentialStore()
 	s := New(&Config{
-		Credentials:   creds,
-		UserStore:     credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
-		AdminUsername: "admin",
-		AdminPassword: "secret",
+		Credentials: creds,
+		UserStore:   credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
+		AdminStore:  newSeededAdminStore(t, "admin", "secret"),
 		// Logger intentionally nil — default logger must be created
 	})
 	assert.NotNil(t, s)
@@ -516,8 +599,7 @@ func TestServer_RateLimiting(t *testing.T) {
 	s := New(&Config{
 		Credentials:      creds,
 		UserStore:        credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
-		AdminUsername:    "admin",
-		AdminPassword:    "secret",
+		AdminStore:       newSeededAdminStore(t, "admin", "secret"),
 		MaxLoginAttempts: 3,
 		LoginWindow:      time.Minute,
 		LockoutDuration:  50 * time.Millisecond,
@@ -638,11 +720,10 @@ func TestServer_ProxyUsersWithTraffic_RecentSessionStillActive(t *testing.T) {
 	sess.Close()
 
 	s := New(&Config{
-		Credentials:   creds,
-		Tracker:       tracker,
-		AdminUsername: "admin",
-		AdminPassword: "secret",
-		Logger:        &logger,
+		Credentials: creds,
+		Tracker:     tracker,
+		AdminStore:  newSeededAdminStore(t, "admin", "secret"),
+		Logger:      &logger,
 	})
 
 	rows := s.proxyUsersWithTraffic()
@@ -659,11 +740,10 @@ func TestServer_NilUserStore_CreateUser(t *testing.T) {
 	logger := zerolog.New(io.Discard)
 	creds := credential.NewStaticCredentialStore()
 	s := New(&Config{
-		Credentials:   creds,
-		UserStore:     nil, // nil — persistUsers must short-circuit
-		AdminUsername: "admin",
-		AdminPassword: "secret",
-		Logger:        &logger,
+		Credentials: creds,
+		UserStore:   nil, // nil — persistUsers must short-circuit
+		AdminStore:  newSeededAdminStore(t, "admin", "secret"),
+		Logger:      &logger,
 	})
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
@@ -753,8 +833,7 @@ func TestServer_OriginPolicy_InvalidOriginHeader(t *testing.T) {
 	s := New(&Config{
 		Credentials:    creds,
 		UserStore:      credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
-		AdminUsername:  "admin",
-		AdminPassword:  "secret",
+		AdminStore:     newSeededAdminStore(t, "admin", "secret"),
 		AllowedOrigins: []string{"http://allowed.local"},
 		Logger:         &logger,
 	})
@@ -777,8 +856,7 @@ func TestServer_OriginPolicy_WrongOrigin(t *testing.T) {
 	s := New(&Config{
 		Credentials:    creds,
 		UserStore:      credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
-		AdminUsername:  "admin",
-		AdminPassword:  "secret",
+		AdminStore:     newSeededAdminStore(t, "admin", "secret"),
 		AllowedOrigins: []string{"http://allowed.local"},
 		Logger:         &logger,
 	})
@@ -801,8 +879,7 @@ func TestServer_OriginPolicy_RefererAllowed(t *testing.T) {
 	s := New(&Config{
 		Credentials:    creds,
 		UserStore:      credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
-		AdminUsername:  "admin",
-		AdminPassword:  "secret",
+		AdminStore:     newSeededAdminStore(t, "admin", "secret"),
 		AllowedOrigins: []string{"http://allowed.local"},
 		Logger:         &logger,
 	})
@@ -826,8 +903,7 @@ func TestServer_OriginPolicy_RefererNotAllowed(t *testing.T) {
 	s := New(&Config{
 		Credentials:    creds,
 		UserStore:      credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
-		AdminUsername:  "admin",
-		AdminPassword:  "secret",
+		AdminStore:     newSeededAdminStore(t, "admin", "secret"),
 		AllowedOrigins: []string{"http://allowed.local"},
 		Logger:         &logger,
 	})
@@ -850,8 +926,7 @@ func TestServer_OriginPolicy_BadReferer(t *testing.T) {
 	s := New(&Config{
 		Credentials:    creds,
 		UserStore:      credential.NewBoltStore(filepath.Join(t.TempDir(), "data.db")),
-		AdminUsername:  "admin",
-		AdminPassword:  "secret",
+		AdminStore:     newSeededAdminStore(t, "admin", "secret"),
 		AllowedOrigins: []string{"http://allowed.local"},
 		Logger:         &logger,
 	})

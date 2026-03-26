@@ -22,8 +22,6 @@ func TestBuildCredentialStore_MergesFileAndEnv_EnvOverrides(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		AdminUsername: "admin",
-		AdminPassword: "admin-secret",
 		UserStorePath: storePath,
 		Credentials: []string{
 			"shared-user:" + hashedPassword(t, "env-password"),

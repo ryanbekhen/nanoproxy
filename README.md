@@ -219,26 +219,22 @@ docker run --rm -e TOR_ENABLED=true -d --privileged --cap-add=NET_ADMIN --sysctl
 
 ## Configuration
 
-You can also set the configuration using environment variables. Create a file at `/etc/nanoproxy/nanoproxy` and add the
-desired values:
+You can also set the configuration using environment variables directly in your shell:
 
-```text
-ADDR=:1080
-ADDR_HTTP=:8080
-ADDR_ADMIN=:9090
-NETWORK=tcp
-TZ=Asia/Jakarta
-CLIENT_TIMEOUT=10s
-DNS_TIMEOUT=10s
-CREDENTIALS=username:passwordHash
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=change-me
-USER_STORE_PATH=/var/lib/nanoproxy/data.db
-ADMIN_COOKIE_SECURE=true
-ADMIN_MAX_LOGIN_ATTEMPTS=5
-ADMIN_LOGIN_WINDOW=5m
-ADMIN_LOCKOUT_DURATION=10m
-ADMIN_ALLOWED_ORIGINS=https://admin.example.com
+```shell
+export ADDR=:1080
+export ADDR_HTTP=:8080
+export ADDR_ADMIN=:9090
+export NETWORK=tcp
+export TZ=Asia/Jakarta
+export CLIENT_TIMEOUT=10s
+export CREDENTIALS=username:passwordHash
+export USER_STORE_PATH=/var/lib/nanoproxy/data.db
+export ADMIN_COOKIE_SECURE=true
+export ADMIN_MAX_LOGIN_ATTEMPTS=5
+export ADMIN_LOGIN_WINDOW=5m
+export ADMIN_LOCKOUT_DURATION=10m
+export ADMIN_ALLOWED_ORIGINS=https://admin.example.com
 ```
 
 For the creation of the password hash, you can use the `htpasswd -nB username` command, but you need to install the
@@ -269,8 +265,6 @@ The following table lists the available configuration options:
 | CLIENT_TIMEOUT           | The timeout for connecting to the destination Server.           | `10s`               |
 | DNS_TIMEOUT              | The timeout for DNS resolution.                                 | `10s`               |
 | CREDENTIALS              | The credentials to use for authentication.                      | `""`                |
-| ADMIN_USERNAME           | Admin console username.                                         | `""`                |
-| ADMIN_PASSWORD           | Admin console password.                                         | `""`                |
 | USER_STORE_PATH          | BoltDB path for persisted admin-managed proxy users.            | `nanoproxy-data.db` |
 | ADMIN_COOKIE_SECURE      | Set admin session cookie as Secure (requires HTTPS).            | `false`             |
 | ADMIN_MAX_LOGIN_ATTEMPTS | Max failed admin logins allowed inside login window.            | `5`                 |
@@ -284,7 +278,6 @@ The following table lists the available configuration options:
   port combination for custom setups.
 - **CREDENTIALS**: When enabled, both SOCKS5 and HTTP Proxy requests are authenticated using the credentials provided in
   this field. This supports `username:password` pairs as bootstrap credentials loaded at startup.
-- **ADMIN_USERNAME** / **ADMIN_PASSWORD**: Enable the built-in admin console for managing proxy users from the browser.
 - **USER_STORE_PATH**: Admin-created proxy users are stored on disk at this path so they survive restarts. NanoProxy
   still authenticates requests from its in-memory credential stores, and only admin mutations trigger disk writes, so
   the proxy hot path is not slowed down by persistence.
@@ -295,24 +288,23 @@ The following table lists the available configuration options:
 
 ## Admin Console and Persistent Proxy Users
 
-When `ADMIN_USERNAME` and `ADMIN_PASSWORD` are configured, NanoProxy starts an admin console on `ADDR_ADMIN`.
+NanoProxy starts an admin console on `ADDR_ADMIN`.
 
 - Visit `/` or `/admin` on the admin address.
-- Log in with the admin credentials from the environment.
+- On first run (when no admin exists in `USER_STORE_PATH`), create the admin account at `/admin/setup`.
+- After setup, log in using that admin account.
 - Add or delete proxy users from the UI.
 - Those proxy users are saved to `USER_STORE_PATH` and loaded again on restart.
 
 Example:
 
 ```shell
-ADDR=:1080
-ADDR_HTTP=:8080
-ADDR_ADMIN=:9090
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=change-me
-USER_STORE_PATH=/var/lib/nanoproxy/data.db
-ADMIN_COOKIE_SECURE=true
-ADMIN_ALLOWED_ORIGINS=https://admin.example.com
+export ADDR=:1080
+export ADDR_HTTP=:8080
+export ADDR_ADMIN=:9090
+export USER_STORE_PATH=/var/lib/nanoproxy/data.db
+export ADMIN_COOKIE_SECURE=true
+export ADMIN_ALLOWED_ORIGINS=https://admin.example.com
 go run .
 ```
 

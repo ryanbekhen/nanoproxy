@@ -4,7 +4,7 @@ COPY --chmod=0755 $TARGETPLATFORM/nanoproxy /usr/bin/nanoproxy
 
 ENV USER_STORE_PATH=/var/lib/nanoproxy/data.db
 
-VOLUME ["/etc/nanoproxy", "/var/lib/nanoproxy"]
+VOLUME ["/var/lib/nanoproxy"]
 
 EXPOSE 1080
 EXPOSE 8080

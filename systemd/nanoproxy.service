@@ -3,7 +3,13 @@ Description=NanoProxy is a simple reverse proxy written in Go
 After=network.target
 
 [Service]
-EnvironmentFile=/etc/nanoproxy/nanoproxy
+Environment=ADDR=:1080
+Environment=ADDR_HTTP=:8080
+Environment=ADDR_ADMIN=:9090
+Environment=NETWORK=tcp
+Environment=TZ=Local
+Environment=USER_STORE_PATH=/var/lib/nanoproxy/data.db
+ExecStartPre=/bin/mkdir -p /var/lib/nanoproxy
 ExecStart=/usr/bin/nanoproxy
 WorkingDirectory=/usr/bin
 Restart=always

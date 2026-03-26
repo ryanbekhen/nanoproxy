@@ -22,6 +22,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/ryanbekhen/nanoproxy/pkg/credential"
 	"github.com/ryanbekhen/nanoproxy/pkg/traffic"
+	"golang.org/x/crypto/bcrypt"
 )
 
 //go:embed templates/*.gohtml
@@ -38,6 +39,7 @@ const (
 	defaultMaxLoginAttempts = 5
 	defaultLoginWindow      = 5 * time.Minute
 	defaultLockoutDuration  = 10 * time.Minute
+	minAdminPasswordLength  = 8
 )
 
 var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
@@ -45,10 +47,9 @@ var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 type Config struct {
 	Credentials      *credential.StaticCredentialStore
 	UserStore        credential.PersistentStore
+	AdminStore       AdminCredentialStore
 	TrafficStore     traffic.Store
 	Tracker          *traffic.Tracker
-	AdminUsername    string
-	AdminPassword    string
 	CookieSecure     bool
 	MaxLoginAttempts int
 	LoginWindow      time.Duration
@@ -62,7 +63,13 @@ type Server struct {
 	tmpl     *template.Template
 	sessions map[string]session
 	logins   map[string]loginAttempt
+	admin    adminCredential
 	mu       sync.Mutex
+}
+
+type adminCredential struct {
+	Username     string
+	PasswordHash string
 }
 
 type session struct {
@@ -84,6 +91,10 @@ type usersViewData struct {
 	CSRFToken         string
 	ProxyUsers        []proxyUserView
 	TotalUsers        int
+}
+
+type setupViewData struct {
+	Error string
 }
 
 type proxyUserView struct {
@@ -116,22 +127,38 @@ func New(conf *Config) *Server {
 		conf.LockoutDuration = defaultLockoutDuration
 	}
 
+	if conf.Credentials == nil {
+		conf.Credentials = credential.NewStaticCredentialStore()
+	}
+
 	conf.AllowedOrigins = normalizeAllowedOrigins(conf.AllowedOrigins)
 
 	tmpl := template.Must(template.ParseFS(templatesFS, "templates/*.gohtml"))
 
-	return &Server{
+	server := &Server{
 		config:   conf,
 		tmpl:     tmpl,
 		sessions: make(map[string]session),
 		logins:   make(map[string]loginAttempt),
 	}
+
+	if conf.AdminStore != nil {
+		username, passwordHash, found, err := conf.AdminStore.Load()
+		if err != nil {
+			conf.Logger.Warn().Err(err).Msg("failed to load admin credentials from store")
+		} else if found {
+			server.admin = adminCredential{Username: username, PasswordHash: passwordHash}
+		}
+	}
+
+	return server
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleRoot)
 	mux.HandleFunc("/admin", s.handleIndex)
+	mux.HandleFunc("/admin/setup", s.handleSetup)
 	mux.HandleFunc("/admin/login", s.handleLogin)
 	mux.HandleFunc("/admin/logout", s.handleLogout)
 	mux.HandleFunc("/admin/users", s.handleUsers)
@@ -160,6 +187,11 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+	if !s.hasConfiguredAdminCredentials() {
+		http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
+		return
+	}
+
 	if s.isAuthenticated(r) {
 		http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
 		return
@@ -167,15 +199,88 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
 }
 
+func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
+	if s.hasConfiguredAdminCredentials() {
+		if s.isAuthenticated(r) {
+			http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+			return
+		}
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		s.renderTemplate(w, "setup.gohtml", setupViewData{}, http.StatusOK)
+	case http.MethodPost:
+		if err := s.verifyOrigin(r); err != nil {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "invalid form", http.StatusBadRequest)
+			return
+		}
+
+		username := strings.TrimSpace(r.FormValue("username"))
+		password := r.FormValue("password")
+		confirmPassword := r.FormValue("confirm_password")
+
+		if err := validateUsername(username); err != nil {
+			s.renderTemplate(w, "setup.gohtml", setupViewData{Error: err.Error()}, http.StatusBadRequest)
+			return
+		}
+
+		if len(password) < minAdminPasswordLength {
+			s.renderTemplate(w, "setup.gohtml", setupViewData{Error: fmt.Sprintf("password must be at least %d characters", minAdminPasswordLength)}, http.StatusBadRequest)
+			return
+		}
+
+		if subtle.ConstantTimeCompare([]byte(password), []byte(confirmPassword)) != 1 {
+			s.renderTemplate(w, "setup.gohtml", setupViewData{Error: "password confirmation does not match"}, http.StatusBadRequest)
+			return
+		}
+
+		if err := s.bootstrapAdminCredentials(username, password); err != nil {
+			if strings.Contains(err.Error(), "already configured") {
+				http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+				return
+			}
+			s.renderTemplate(w, "setup.gohtml", setupViewData{Error: "failed to create admin credentials"}, http.StatusInternalServerError)
+			return
+		}
+
+		if err := s.createSession(w); err != nil {
+			http.Error(w, "failed to create session", http.StatusInternalServerError)
+			return
+		}
+
+		http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
+		if !s.hasConfiguredAdminCredentials() {
+			http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
+			return
+		}
+
 		if s.isAuthenticated(r) {
 			http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
 			return
 		}
 		s.renderTemplate(w, "login.gohtml", map[string]any{"Error": ""}, http.StatusOK)
 	case http.MethodPost:
+		if !s.hasConfiguredAdminCredentials() {
+			http.Redirect(w, r, "/admin/setup", http.StatusSeeOther)
+			return
+		}
+
 		if err := s.verifyOrigin(r); err != nil {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
@@ -201,35 +306,10 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		s.clearFailedLogins(clientIP)
 
-		token, err := newRandomToken(32)
-		if err != nil {
+		if err := s.createSession(w); err != nil {
 			http.Error(w, "failed to create session", http.StatusInternalServerError)
 			return
 		}
-		csrfToken, err := newRandomToken(32)
-		if err != nil {
-			http.Error(w, "failed to create session", http.StatusInternalServerError)
-			return
-		}
-
-		expiresAt := time.Now().Add(sessionTTL)
-		s.mu.Lock()
-		s.sessions[token] = session{
-			ExpiresAt: expiresAt,
-			CSRFToken: csrfToken,
-		}
-		s.mu.Unlock()
-
-		// #nosec G124 -- Secure is configurable for local HTTP admin use; HttpOnly and SameSite are enforced.
-		http.SetCookie(w, &http.Cookie{
-			Name:     sessionCookieName,
-			Value:    token,
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   s.config.CookieSecure,
-			SameSite: http.SameSiteStrictMode,
-			Expires:  expiresAt,
-		})
 
 		http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
 	default:
@@ -626,13 +706,91 @@ func (s *Server) persistTraffic() error {
 }
 
 func (s *Server) validateAdminCredentials(username, password string) bool {
-	if subtle.ConstantTimeCompare([]byte(username), []byte(s.config.AdminUsername)) != 1 {
+	storedUsername, storedPasswordHash, found := s.currentStoredAdminCredentials()
+	if !found {
 		return false
 	}
-	if subtle.ConstantTimeCompare([]byte(password), []byte(s.config.AdminPassword)) != 1 {
+
+	if subtle.ConstantTimeCompare([]byte(username), []byte(storedUsername)) != 1 {
 		return false
 	}
-	return true
+
+	return bcrypt.CompareHashAndPassword([]byte(storedPasswordHash), []byte(password)) == nil
+}
+
+func (s *Server) createSession(w http.ResponseWriter) error {
+	token, err := newRandomToken(32)
+	if err != nil {
+		return err
+	}
+
+	csrfToken, err := newRandomToken(32)
+	if err != nil {
+		return err
+	}
+
+	expiresAt := time.Now().Add(sessionTTL)
+	s.mu.Lock()
+	s.sessions[token] = session{ExpiresAt: expiresAt, CSRFToken: csrfToken}
+	s.mu.Unlock()
+
+	// #nosec G124 -- Secure is configurable for local HTTP admin use; HttpOnly and SameSite are enforced.
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   s.config.CookieSecure,
+		SameSite: http.SameSiteStrictMode,
+		Expires:  expiresAt,
+	})
+
+	return nil
+}
+
+func (s *Server) hasConfiguredAdminCredentials() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.hasConfiguredAdminCredentialsLocked()
+}
+
+func (s *Server) hasConfiguredAdminCredentialsLocked() bool {
+	return s.admin.Username != "" && s.admin.PasswordHash != ""
+}
+
+func (s *Server) currentStoredAdminCredentials() (string, string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.admin.Username == "" || s.admin.PasswordHash == "" {
+		return "", "", false
+	}
+
+	return s.admin.Username, s.admin.PasswordHash, true
+}
+
+func (s *Server) bootstrapAdminCredentials(username, password string) error {
+	if s.config.AdminStore == nil {
+		return httpError("admin credential store is not configured")
+	}
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.hasConfiguredAdminCredentialsLocked() {
+		return httpError("admin credentials already configured")
+	}
+
+	if err := s.config.AdminStore.Save(username, string(passwordHash)); err != nil {
+		return err
+	}
+
+	s.admin = adminCredential{Username: username, PasswordHash: string(passwordHash)}
+	return nil
 }
 
 func (s *Server) isAuthenticated(r *http.Request) bool {

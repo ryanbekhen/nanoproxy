@@ -185,9 +185,6 @@ nfpms:
       - src: systemd/nanoproxy.service
         dst: /etc/systemd/system/nanoproxy.service
         type: "config|noreplace"
-      - src: config/nanoproxy
-        dst: /etc/nanoproxy/nanoproxy
-        type: "config|noreplace"
     formats:
       - deb
       - rpm

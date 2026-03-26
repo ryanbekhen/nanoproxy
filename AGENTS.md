@@ -28,8 +28,8 @@
   `pkg/tor/controller.go`).
 - `Dockerfile-tor` + `supervisord.conf` run both Tor and NanoProxy in one container; this is the intended Tor deployment
   path.
-- System package/service deployment uses `systemd/nanoproxy.service` and env file `config/nanoproxy` (
-  `/etc/nanoproxy/nanoproxy`).
+- System package/service deployment uses `systemd/nanoproxy.service` with inline `Environment=` values and optional
+  systemd drop-ins for overrides.
 
 ## Developer workflows that matter here
 
