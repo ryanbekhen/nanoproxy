@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/caarlos0/env/v10 v10.0.0
-	github.com/rs/zerolog v1.35.0
+	github.com/rs/zerolog v1.35.1
 	github.com/stretchr/testify v1.11.1
 	go.etcd.io/bbolt v1.4.3
 	golang.org/x/crypto v0.50.0
