@@ -43,6 +43,12 @@ NanoProxy is configured entirely through environment variables. There is no conf
 | `ADMIN_LOCKOUT_DURATION`   | duration     | `10m`   | Duration to lock account after max failed attempts                                               |
 | `ADMIN_ALLOWED_ORIGINS`    | string (csv) | empty   | Comma-separated list of allowed CORS origins for admin panel (e.g., `https://admin.example.com`) |
 
+### Proxy Authentication Mode
+
+| Variable       | Type | Default | Description                                                                       |
+|----------------|------|---------|-----------------------------------------------------------------------------------|
+| `NO_AUTH_MODE` | bool | `false` | Disable proxy auth for SOCKS5/HTTP and skip admin server startup (`true`/`false`) |
+
 ### Tor Integration
 
 | Variable                | Type     | Default | Description                                                    |
@@ -71,6 +77,16 @@ LOG_LEVEL=info
 ```
 
 Then access the admin console to create users.
+
+### Headless Proxy (No Admin + No Auth)
+
+```bash
+ADDR=:1080
+ADDR_HTTP=:8080
+NO_AUTH_MODE=true
+```
+
+Use this mode when you only need proxy forwarding and do not want the admin HTTP surface.
 
 ### Production Deployment
 
@@ -179,7 +195,7 @@ WantedBy=multi-user.target
 
 ## Admin Console and Persistent Proxy Users
 
-NanoProxy starts an admin console on `ADDR_ADMIN`.
+NanoProxy starts an admin console on `ADDR_ADMIN` in normal mode (`NO_AUTH_MODE=false`).
 
 - Visit `/` or `/admin` on the admin address.
 - On first run (when no admin exists in `USER_STORE_PATH`), create the admin account at `/admin/setup`.
@@ -219,6 +235,7 @@ go run .
 - Admin panel is accessible at `http://localhost:9090` (or configured `ADDR_ADMIN`)
 - Initial admin account is set up through the `/admin/setup` web interface on first run
 - Proxy users can be created and managed through the admin panel
+- Set `NO_AUTH_MODE=true` to allow unauthenticated proxy traffic and skip admin startup
 - For production, always use `LOG_LEVEL=warn` or `error` to reduce log noise
 - Database file location should be on persistent storage in containers/orchestration
 

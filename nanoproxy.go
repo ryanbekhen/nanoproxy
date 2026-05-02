@@ -48,7 +48,10 @@ func main() {
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Failed to initialize credentials")
 	}
-	adminStore := admin.NewBoltAdminStore(cfg.UserStorePath)
+	proxyCredentials := proxyCredentialsForMode(cfg, credentials)
+	if cfg.NoAuthMode {
+		logger.Warn().Msg("NO_AUTH_MODE is enabled; HTTP and SOCKS5 proxy authentication is disabled and admin server is skipped")
+	}
 
 	dnsResolver := &resolver.DNSResolver{}
 	trafficTracker := traffic.NewTracker()
@@ -60,7 +63,7 @@ func main() {
 	}
 
 	httpConfig := httpproxy.Config{
-		Credentials:       credentials,
+		Credentials:       proxyCredentials,
 		Logger:            &logger,
 		DestConnTimeout:   cfg.DestTimeout,
 		ClientConnTimeout: cfg.ClientTimeout,
@@ -95,9 +98,9 @@ func main() {
 		}()
 	}
 
-	if credentials != nil {
+	if proxyCredentials != nil {
 		authenticator := &socks5.UserPassAuthenticator{
-			Credentials: credentials,
+			Credentials: proxyCredentials,
 		}
 		socks5Config.Authentication = append(socks5Config.Authentication, authenticator)
 	}
@@ -127,35 +130,40 @@ func main() {
 		}
 	}()
 
-	adminServer := admin.New(&admin.Config{
-		Credentials:      credentials,
-		UserStore:        userFileStore,
-		AdminStore:       adminStore,
-		TrafficStore:     trafficStore,
-		Tracker:          trafficTracker,
-		CookieSecure:     cfg.AdminCookieSecure,
-		MaxLoginAttempts: cfg.AdminMaxLoginAttempts,
-		LoginWindow:      cfg.AdminLoginWindow,
-		LockoutDuration:  cfg.AdminLockoutDuration,
-		AllowedOrigins:   cfg.AdminAllowedOrigins,
-		Logger:           &logger,
-	})
+	if adminEnabledForMode(cfg) {
+		adminStore := admin.NewBoltAdminStore(cfg.UserStorePath)
+		adminServer := admin.New(&admin.Config{
+			Credentials:      credentials,
+			UserStore:        userFileStore,
+			AdminStore:       adminStore,
+			TrafficStore:     trafficStore,
+			Tracker:          trafficTracker,
+			CookieSecure:     cfg.AdminCookieSecure,
+			MaxLoginAttempts: cfg.AdminMaxLoginAttempts,
+			LoginWindow:      cfg.AdminLoginWindow,
+			LockoutDuration:  cfg.AdminLockoutDuration,
+			AllowedOrigins:   cfg.AdminAllowedOrigins,
+			Logger:           &logger,
+		})
 
-	go func() {
-		logger.Info().Msgf("Starting admin server on %s", cfg.ADDRAdmin)
+		go func() {
+			logger.Info().Msgf("Starting admin server on %s", cfg.ADDRAdmin)
 
-		server := &http.Server{
-			Addr:         cfg.ADDRAdmin,
-			Handler:      adminServer.Handler(),
-			ReadTimeout:  15 * time.Second,
-			WriteTimeout: 15 * time.Second,
-			IdleTimeout:  60 * time.Second,
-		}
+			server := &http.Server{
+				Addr:         cfg.ADDRAdmin,
+				Handler:      adminServer.Handler(),
+				ReadTimeout:  15 * time.Second,
+				WriteTimeout: 15 * time.Second,
+				IdleTimeout:  60 * time.Second,
+			}
 
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Fatal().Msg(err.Error())
-		}
-	}()
+			if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				logger.Fatal().Msg(err.Error())
+			}
+		}()
+	} else {
+		logger.Info().Msg("Admin server startup is skipped in NO_AUTH_MODE")
+	}
 
 	select {}
 }
@@ -169,4 +177,18 @@ func buildCredentialStore(cfg *config.Config) (*credential.StaticCredentialStore
 	}
 
 	return credentials, userStore, nil
+}
+
+func proxyCredentialsForMode(cfg *config.Config, credentials *credential.StaticCredentialStore) credential.Store {
+	if cfg != nil && cfg.NoAuthMode {
+		return nil
+	}
+	return credentials
+}
+
+func adminEnabledForMode(cfg *config.Config) bool {
+	if cfg == nil {
+		return true
+	}
+	return !cfg.NoAuthMode
 }

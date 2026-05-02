@@ -36,3 +36,47 @@ func TestBuildCredentialStore_LoadsFromDatabase(t *testing.T) {
 		t.Fatal("expected db-user to be valid from database")
 	}
 }
+
+func TestProxyCredentialsForMode_NoAuthEnabled(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{NoAuthMode: true}
+	credentials := credential.NewStaticCredentialStore()
+	credentials.Add("db-user", "password")
+
+	selected := proxyCredentialsForMode(cfg, credentials)
+	if selected != nil {
+		t.Fatal("expected nil credentials in NO_AUTH_MODE")
+	}
+}
+
+func TestProxyCredentialsForMode_NoAuthDisabled(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{NoAuthMode: false}
+	credentials := credential.NewStaticCredentialStore()
+	credentials.Add("db-user", "password")
+
+	selected := proxyCredentialsForMode(cfg, credentials)
+	if selected == nil {
+		t.Fatal("expected non-nil credentials when NO_AUTH_MODE is disabled")
+	}
+}
+
+func TestAdminEnabledForMode_NoAuthEnabled(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{NoAuthMode: true}
+	if adminEnabledForMode(cfg) {
+		t.Fatal("expected admin to be disabled when NO_AUTH_MODE is enabled")
+	}
+}
+
+func TestAdminEnabledForMode_NoAuthDisabled(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{NoAuthMode: false}
+	if !adminEnabledForMode(cfg) {
+		t.Fatal("expected admin to be enabled when NO_AUTH_MODE is disabled")
+	}
+}

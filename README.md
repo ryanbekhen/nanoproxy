@@ -226,12 +226,21 @@ configuration options, environment variable reference, and examples, see [docs/C
 export ADDR=:1080
 export ADDR_HTTP=:8080
 export ADDR_ADMIN=:9090
+export NO_AUTH_MODE=false
 export LOG_LEVEL=info
 export USER_STORE_PATH=./nanoproxy-data.db
 ```
 
 Then access the admin panel at `http://localhost:9090/admin/setup` to create your initial admin account and add proxy
 users.
+
+To run without proxy authentication:
+
+```shell
+export NO_AUTH_MODE=true
+```
+
+When `NO_AUTH_MODE=true`, admin server is also automatically disabled.
 
 ## Logging
 
@@ -286,6 +295,8 @@ curl -x http://localhost:8080 -U username:password https://example.com
 
 If authentication fails or is not provided, the proxy will return `407 Proxy Authentication Required` along with the
 appropriate `Proxy-Authenticate` header.
+
+When `NO_AUTH_MODE=true`, both HTTP and SOCKS5 accept anonymous clients and no credentials are required.
 
 ## Contributions
 

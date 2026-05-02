@@ -9,6 +9,7 @@ type Config struct {
 	ADDR                  string        `env:"ADDR" envDefault:":1080"`
 	ADDRHttp              string        `env:"ADDR_HTTP" envDefault:":8080"`
 	ADDRAdmin             string        `env:"ADDR_ADMIN" envDefault:":9090"`
+	NoAuthMode            bool          `env:"NO_AUTH_MODE" envDefault:"false"`
 	UserStorePath         string        `env:"USER_STORE_PATH" envDefault:"nanoproxy-data.db"`
 	AdminCookieSecure     bool          `env:"ADMIN_COOKIE_SECURE" envDefault:"false"`
 	AdminMaxLoginAttempts int           `env:"ADMIN_MAX_LOGIN_ATTEMPTS" envDefault:"5"`
