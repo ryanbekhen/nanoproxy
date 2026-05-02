@@ -50,16 +50,19 @@ func main() {
 	}
 	proxyCredentials := proxyCredentialsForMode(cfg, credentials)
 	if cfg.NoAuthMode {
-		logger.Warn().Msg("NO_AUTH_MODE is enabled; HTTP and SOCKS5 proxy authentication is disabled and admin server is skipped")
+		logger.Warn().Msg("NO_AUTH_MODE is enabled; proxy authentication, admin server, and database-backed state loading are skipped")
 	}
 
 	dnsResolver := &resolver.DNSResolver{}
 	trafficTracker := traffic.NewTracker()
 
-	// Load persisted traffic totals
-	trafficStore := traffic.NewBoltStore(cfg.UserStorePath)
-	if err := trafficTracker.LoadPersistedTotals(trafficStore); err != nil {
-		logger.Warn().Err(err).Msg("Failed to load persisted traffic totals")
+	trafficStore := trafficStoreForMode(cfg)
+	if trafficStore != nil {
+		if err := trafficTracker.LoadPersistedTotals(trafficStore); err != nil {
+			logger.Warn().Err(err).Msg("Failed to load persisted traffic totals")
+		}
+	} else if cfg.NoAuthMode {
+		logger.Info().Msg("Traffic persistence is disabled in NO_AUTH_MODE")
 	}
 
 	httpConfig := httpproxy.Config{
@@ -169,7 +172,18 @@ func main() {
 }
 
 func buildCredentialStore(cfg *config.Config) (*credential.StaticCredentialStore, credential.PersistentStore, error) {
-	userStore := credential.NewBoltStore(cfg.UserStorePath)
+	if cfg == nil {
+		return nil, nil, fmt.Errorf("config is nil")
+	}
+
+	noAuthMode := cfg.NoAuthMode
+	userStorePath := cfg.UserStorePath
+
+	if noAuthMode {
+		return credential.NewStaticCredentialStore(), nil, nil
+	}
+
+	userStore := credential.NewBoltStore(userStorePath)
 
 	credentials := credential.NewStaticCredentialStore()
 	if err := credential.LoadInto(userStore, credentials); err != nil {
@@ -191,4 +205,11 @@ func adminEnabledForMode(cfg *config.Config) bool {
 		return true
 	}
 	return !cfg.NoAuthMode
+}
+
+func trafficStoreForMode(cfg *config.Config) traffic.Store {
+	if cfg == nil || cfg.NoAuthMode {
+		return nil
+	}
+	return traffic.NewBoltStore(cfg.UserStorePath)
 }
