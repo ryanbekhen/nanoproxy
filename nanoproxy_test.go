@@ -37,6 +37,26 @@ func TestBuildCredentialStore_LoadsFromDatabase(t *testing.T) {
 	}
 }
 
+func TestBuildCredentialStore_NoAuthModeSkipsDatabase(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		NoAuthMode:    true,
+		UserStorePath: filepath.Join(t.TempDir(), "missing", "data.db"),
+	}
+
+	credentials, userStore, err := buildCredentialStore(cfg)
+	if err != nil {
+		t.Fatalf("buildCredentialStore returned error: %v", err)
+	}
+	if credentials == nil {
+		t.Fatal("expected non-nil in-memory credentials in NO_AUTH_MODE")
+	}
+	if userStore != nil {
+		t.Fatal("expected nil persistent user store in NO_AUTH_MODE")
+	}
+}
+
 func TestProxyCredentialsForMode_NoAuthEnabled(t *testing.T) {
 	t.Parallel()
 
@@ -78,5 +98,23 @@ func TestAdminEnabledForMode_NoAuthDisabled(t *testing.T) {
 	cfg := &config.Config{NoAuthMode: false}
 	if !adminEnabledForMode(cfg) {
 		t.Fatal("expected admin to be enabled when NO_AUTH_MODE is disabled")
+	}
+}
+
+func TestTrafficStoreForMode_NoAuthEnabled(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{NoAuthMode: true}
+	if store := trafficStoreForMode(cfg); store != nil {
+		t.Fatal("expected nil traffic store in NO_AUTH_MODE")
+	}
+}
+
+func TestTrafficStoreForMode_NoAuthDisabled(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{NoAuthMode: false, UserStorePath: filepath.Join(t.TempDir(), "data.db")}
+	if store := trafficStoreForMode(cfg); store == nil {
+		t.Fatal("expected non-nil traffic store when NO_AUTH_MODE is disabled")
 	}
 }

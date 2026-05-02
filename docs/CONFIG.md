@@ -45,9 +45,9 @@ NanoProxy is configured entirely through environment variables. There is no conf
 
 ### Proxy Authentication Mode
 
-| Variable       | Type | Default | Description                                                                       |
-|----------------|------|---------|-----------------------------------------------------------------------------------|
-| `NO_AUTH_MODE` | bool | `false` | Disable proxy auth for SOCKS5/HTTP and skip admin server startup (`true`/`false`) |
+| Variable       | Type | Default | Description                                                                           |
+|----------------|------|---------|---------------------------------------------------------------------------------------|
+| `NO_AUTH_MODE` | bool | `false` | Disable proxy auth, skip admin startup, and ignore `USER_STORE_PATH` (`true`/`false`) |
 
 ### Tor Integration
 
@@ -235,7 +235,7 @@ go run .
 - Admin panel is accessible at `http://localhost:9090` (or configured `ADDR_ADMIN`)
 - Initial admin account is set up through the `/admin/setup` web interface on first run
 - Proxy users can be created and managed through the admin panel
-- Set `NO_AUTH_MODE=true` to allow unauthenticated proxy traffic and skip admin startup
+- Set `NO_AUTH_MODE=true` to allow unauthenticated proxy traffic and skip admin/database-backed state loading
 - For production, always use `LOG_LEVEL=warn` or `error` to reduce log noise
 - Database file location should be on persistent storage in containers/orchestration
 
