@@ -199,7 +199,8 @@ publishers:
     ids:
       - packages
     dir: "{{ dir .ArtifactPath }}"
-    cmd: curl -F package=@{{ .ArtifactName }} https://{{ .Env.FURY_TOKEN }}@push.fury.io/ryanbekhen/
+    cmd: >-
+      bash -euo pipefail -c 'test -n "{{ .Env.FURY_TOKEN }}" || { echo "FURY_TOKEN is not set"; exit 1; }; echo "Uploading {{ .ArtifactName }} to Fury"; curl --silent --show-error --fail-with-body --retry 3 --retry-all-errors -F "package=@{{ .ArtifactName }}" "https://{{ .Env.FURY_TOKEN }}@push.fury.io/ryanbekhen/"'
 
 release:
   name_template: "{{ .Version }}"
