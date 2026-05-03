@@ -1,9 +1,12 @@
 name: Test Coverage
 run-name: Test Coverage
 permissions:
-  contents: read
+  contents: write
 
 on:
+  push:
+    branches:
+      - master
   pull_request:
     branches:
       - master
@@ -42,11 +45,11 @@ jobs:
 
       - name: Make Coverage Badge
         uses: action-badges/core@0.2.2
-        if: contains(github.ref, 'master')
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         with:
           label: coverage
           message: ${{ steps.coverage.outputs.badge-text }}
           message-color: ${{ steps.coverage.outputs.badge-color }}
           file-name: coverage.svg
           badge-branch: badges ## orphan branch where badge will be committed
-          github-token: "${{ secrets.GH_PAT }}"
+          github-token: "${{ github.token }}"
