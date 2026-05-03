@@ -85,7 +85,8 @@ func (s *Server) testHandleRequest(req *Request, conn net.Conn) error {
 		Str("command", req.Command.String()).
 		Str("dest_addr", req.DestAddr.String()).
 		Logger()
-	return s.handleRequest(req, conn, session, reqLogger)
+	err, _ := s.handleRequest(req, conn, session, reqLogger)
+	return err
 }
 
 func TestNew(t *testing.T) {

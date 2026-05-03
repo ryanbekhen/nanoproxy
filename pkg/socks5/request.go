@@ -23,7 +23,10 @@ type AddrSpec struct {
 // String returns a string representation of the address
 func (a *AddrSpec) String() string {
 	if a.FQDN != "" {
-		return fmt.Sprintf("%s (%s):%d", a.FQDN, a.IP, a.Port)
+		if a.IP != nil && len(a.IP) > 0 {
+			return fmt.Sprintf("%s (%s):%d", a.FQDN, a.IP, a.Port)
+		}
+		return fmt.Sprintf("%s:%d", a.FQDN, a.Port)
 	}
 	// Check if the address is an IPv6 address
 	if strings.Count(a.IP.String(), ":") > 1 {
