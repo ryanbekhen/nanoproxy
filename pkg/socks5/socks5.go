@@ -170,7 +170,6 @@ func (s *Server) handleConnection(conn net.Conn) {
 	request.AuthContext = authContext
 	requestLogger := connLogger.With().
 		Str("command", request.Command.String()).
-		Str("dest_addr", request.DestAddr.String()).
 		Logger()
 	requestLogger.Debug().Msg("request received")
 	trafficSession := s.startTrafficSession(authContext, conn)
@@ -180,13 +179,13 @@ func (s *Server) handleConnection(conn net.Conn) {
 		request.RemoteAddr = &AddrSpec{IP: clientAddr.IP, Port: clientAddr.Port}
 	}
 
-	if err := s.handleRequest(request, conn, trafficSession, requestLogger); err != nil &&
-		shouldLogRequestError(err) {
-		requestLogger.Error().
+	err, updatedLogger := s.handleRequest(request, conn, trafficSession, requestLogger)
+	if err != nil && shouldLogRequestError(err) {
+		updatedLogger.Error().
 			Err(err).
 			Msg("request failed")
 	} else if err == nil {
-		requestLogger.Info().
+		updatedLogger.Info().
 			Str("latency", request.Latency.Round(time.Millisecond).String()).
 			Uint64("upload_bytes", trafficSession.UploadBytes()).
 			Uint64("download_bytes", trafficSession.DownloadBytes()).
@@ -216,19 +215,22 @@ func (s *Server) authenticate(conn net.Conn, bufConn *bufio.Reader) (*Context, e
 	return nil, noAcceptable(conn)
 }
 
-func (s *Server) handleRequest(req *Request, conn net.Conn, trafficSession *traffic.Session, requestLogger zerolog.Logger) error {
+func (s *Server) handleRequest(req *Request, conn net.Conn, trafficSession *traffic.Session, requestLogger zerolog.Logger) (error, zerolog.Logger) {
 	dest := req.DestAddr
 	if dest.FQDN != "" {
 		addr, err := s.config.Resolver.Resolve(dest.FQDN)
 		if err != nil {
 			if err := sendReply(conn, StatusHostUnreachable.Uint8(), nil); err != nil {
-				return fmt.Errorf("%w: %w", ErrFailedToSendReply, err)
+				return fmt.Errorf("%w: %w", ErrFailedToSendReply, err), requestLogger
 			}
-			return fmt.Errorf("failed to resolve destination: %w", err)
+			return fmt.Errorf("failed to resolve destination: %w", err), requestLogger
 		}
 		dest.IP = addr
-		requestLogger.Debug().Str("resolved_ip", addr.String()).Msg("resolved destination address")
+		requestLogger = requestLogger.With().Str("resolved_ip", addr.String()).Logger()
+		requestLogger.Debug().Msg("resolved destination address")
 	}
+	// Update dest_addr with resolved IP for final logging
+	requestLogger = requestLogger.With().Str("dest_addr", dest.String()).Logger()
 
 	req.realAddr = req.DestAddr
 	if s.config.Rewriter != nil {
@@ -237,7 +239,8 @@ func (s *Server) handleRequest(req *Request, conn net.Conn, trafficSession *traf
 
 	switch req.Command {
 	case CommandConnect:
-		return s.handleConnect(conn, req, trafficSession, requestLogger)
+		err := s.handleConnect(conn, req, trafficSession, requestLogger)
+		return err, requestLogger
 	// TODO: Implement these
 	//case CommandBind:
 	//	return s.handleBind(conn, req)
@@ -245,9 +248,9 @@ func (s *Server) handleRequest(req *Request, conn net.Conn, trafficSession *traf
 	//	return s.handleAssociate(conn, req)
 	default:
 		if err := sendReply(conn, StatusCommandNotSupported.Uint8(), nil); err != nil {
-			return fmt.Errorf("%w: %w", ErrFailedToSendReply, err)
+			return fmt.Errorf("%w: %w", ErrFailedToSendReply, err), requestLogger
 		}
-		return fmt.Errorf("unsupported command: %d", req.Command)
+		return fmt.Errorf("unsupported command: %d", req.Command), requestLogger
 	}
 }
 
