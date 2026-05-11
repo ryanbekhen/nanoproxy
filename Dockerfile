@@ -1,4 +1,4 @@
-FROM alpine:3.21
+FROM alpine:3.21.7
 ARG TARGETPLATFORM
 COPY --chmod=0755 $TARGETPLATFORM/nanoproxy /usr/bin/nanoproxy
 
