@@ -122,8 +122,8 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 
 	// Read the version byte
-	version := []byte{0}
-	if _, err := connectionBuffer.Read(version); err != nil {
+	version, err := connectionBuffer.ReadByte()
+	if err != nil {
 		if shouldLogRequestError(err) {
 			connLogger.Error().Err(err).Msg("failed to read version byte")
 		}
@@ -131,8 +131,8 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 
 	// Ensure we are compatible
-	if version[0] != Version {
-		connLogger.Error().Uint8("version", version[0]).Msg("unsupported version")
+	if version != Version {
+		connLogger.Error().Uint8("version", version).Msg("unsupported version")
 		return
 	}
 
