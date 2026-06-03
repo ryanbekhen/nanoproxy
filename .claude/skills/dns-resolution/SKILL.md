@@ -1,8 +1,11 @@
-# DNS Resolution Skill
+---
+name: dns-resolution
+description: Use when working with the Resolver interface in pkg/resolver — custom resolvers, DNS caching/TTL, retries, hostname validation, or resolution error handling for the proxy frontends.
+---
 
-## Description
+# DNS Resolution
 
-Expertise in implementing DNS resolution interfaces and custom resolver patterns for hostname-to-IP address translation
+Expertise in implementing DNS resolution interfaces and custom resolver patterns for hostname-to-IP translation
 in the NanoProxy project.
 
 ## When to use this skill
@@ -31,11 +34,11 @@ in the NanoProxy project.
 
 ### Creating a custom resolver
 
-Implement the resolver interface with Resolve method that takes hostname and returns IP address.
+Implement the resolver interface with a Resolve method that takes a hostname and returns an IP address.
 
 ### Adding caching
 
-Implement caching layer to reduce DNS lookups, with TTL support.
+Implement a caching layer to reduce DNS lookups, with TTL support.
 
 ### Error handling
 
@@ -43,7 +46,7 @@ Properly handle NXDOMAIN, timeout, and other DNS errors.
 
 ## Example patterns
 
-### Implementing resolver interface
+### Implementing the resolver interface
 
 ```go
 type Resolver interface {
@@ -62,19 +65,19 @@ func (r *DNSResolver) Resolve(hostname string) (string, error) {
             return cached.ip, nil
         }
     }
-    
+
     // Resolve using system DNS
     addrs, err := net.LookupHost(hostname)
     if err != nil {
         return "", err
     }
-    
+
     // Cache result
     r.cache[hostname] = cachedResult{
         ip:     addrs[0],
         expiry: time.Now().Add(r.ttl),
     }
-    
+
     return addrs[0], nil
 }
 ```
@@ -84,17 +87,17 @@ func (r *DNSResolver) Resolve(hostname string) (string, error) {
 ```go
 func (r *DNSResolver) ResolveWithRetry(hostname string, retries int) (string, error) {
     var lastErr error
-    
+
     for i := 0; i < retries; i++ {
         ip, err := r.Resolve(hostname)
         if err == nil {
             return ip, nil
         }
-        
+
         lastErr = err
         time.Sleep(time.Duration(i+1) * 100 * time.Millisecond)
     }
-    
+
     return "", lastErr
 }
 ```
@@ -114,7 +117,6 @@ func (r *DNSResolver) ResolveWithRetry(hostname string, retries int) (string, er
 
 - Implement caching to reduce lookups
 - Set appropriate TTL values
-- Consider connection pooling for DNS
 - Batch DNS queries when possible
 - Monitor DNS lookup latency
 - Profile resolver performance
@@ -126,17 +128,14 @@ func (r *DNSResolver) ResolveWithRetry(hostname string, retries int) (string, er
 - Implement timeout to prevent hanging
 - Consider DNSSEC validation
 - Log DNS failures appropriately
-- Handle DNS-based attacks
 
 ## References
 
 - RFC 1035: Domain Names - Implementation and Specification
 - Go net package documentation
-- NanoProxy resolver usage
 
 ## Related skills
 
-- SOCKS5 Protocol Implementation - Uses DNS resolution
-- HTTP Proxy Implementation - Uses DNS resolution
-- Go Concurrency - For concurrent DNS lookups
-
+- `socks5-protocol` - Uses DNS resolution
+- `http-proxy` - Uses DNS resolution
+- `go-concurrency` - For concurrent DNS lookups

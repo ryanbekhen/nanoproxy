@@ -1,6 +1,9 @@
-# Credential Management Skill
+---
+name: credential-management
+description: Use when working on proxy authentication and credential storage in pkg/credential — bcrypt hashing, constant-time/secure verification, the BoltDB-backed store, multiple users, and thread-safe access.
+---
 
-## Description
+# Credential Management
 
 Expertise in implementing secure credential storage, authentication validation, and credential management for proxy
 access control in NanoProxy.
@@ -8,7 +11,7 @@ access control in NanoProxy.
 ## When to use this skill
 
 - Implementing credential storage mechanisms
-- Adding user authentication to proxy
+- Adding user authentication to the proxy
 - Validating credentials securely
 - Managing multiple user accounts
 - Implementing rate limiting for auth failures
@@ -32,11 +35,11 @@ access control in NanoProxy.
 
 ### Storing credentials
 
-Use StaticCredentialStore to store username/password pairs in memory.
+Persist username/password pairs in the credential store (BoltDB at `USER_STORE_PATH`).
 
 ### Validating credentials
 
-Implement secure credential validation with constant-time comparison.
+Implement secure credential validation; passwords are hashed with bcrypt.
 
 ### Supporting multiple users
 
@@ -44,7 +47,7 @@ Store and manage multiple username/password pairs safely.
 
 ## Example patterns
 
-### Creating credential store
+### Creating a credential store
 
 ```go
 type CredentialStore interface {
@@ -72,12 +75,12 @@ func (s *StaticCredentialStore) Add(username, password string) {
 func (s *StaticCredentialStore) Verify(username, password string) bool {
     s.mu.RLock()
     defer s.mu.RUnlock()
-    
+
     expectedPassword, ok := s.credentials[username]
     if !ok {
         return false
     }
-    
+
     // Use constant-time comparison
     return subtle.ConstantTimeCompare(
         []byte(password),
@@ -86,13 +89,13 @@ func (s *StaticCredentialStore) Verify(username, password string) bool {
 }
 ```
 
-### With hashing (more secure)
+### With hashing (preferred — matches NanoProxy's bcrypt usage)
 
 ```go
 func (s *StaticCredentialStore) Add(username, password string) {
     s.mu.Lock()
     defer s.mu.Unlock()
-    
+
     hash, err := bcrypt.GenerateFromPassword(
         []byte(password),
         bcrypt.DefaultCost,
@@ -101,19 +104,19 @@ func (s *StaticCredentialStore) Add(username, password string) {
         log.Error().Err(err).Msg("failed to hash password")
         return
     }
-    
+
     s.credentials[username] = string(hash)
 }
 
 func (s *StaticCredentialStore) Verify(username, password string) bool {
     s.mu.RLock()
     defer s.mu.RUnlock()
-    
+
     hash, ok := s.credentials[username]
     if !ok {
         return false
     }
-    
+
     err := bcrypt.CompareHashAndPassword(
         []byte(hash),
         []byte(password),
@@ -136,20 +139,16 @@ func (s *StaticCredentialStore) Verify(username, password string) bool {
 ## Performance considerations
 
 - Use RWMutex for concurrent reads
-- Cache verification results temporarily
-- Implement connection pooling
 - Monitor credential lookup time
 - Profile authentication overhead
 
 ## Security considerations
 
 - Never log passwords
-- Use constant-time comparison
-- Consider hashing passwords
+- Use bcrypt for storage and constant-time comparison for in-memory secrets
 - Clear sensitive data from memory
 - Implement rate limiting
 - Lock account after failed attempts
-- Use secure random for tokens
 - Validate credential format
 
 ## References
@@ -160,7 +159,6 @@ func (s *StaticCredentialStore) Verify(username, password string) bool {
 
 ## Related skills
 
-- SOCKS5 Protocol Implementation - Uses credentials
-- HTTP Proxy Implementation - Uses credentials
-- Go Concurrency - For thread-safe access
-
+- `socks5-protocol` - Uses credentials
+- `http-proxy` - Uses credentials
+- `go-concurrency` - For thread-safe access

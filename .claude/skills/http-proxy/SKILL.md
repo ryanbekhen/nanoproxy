@@ -1,8 +1,11 @@
-# HTTP Proxy Implementation Skill
+---
+name: http-proxy
+description: Use when working on the HTTP/HTTPS proxy in pkg/httpproxy — request forwarding, HTTPS CONNECT tunneling, hop-by-hop header stripping, Proxy-Authorization handling, or proxy forwarding tests.
+---
 
-## Description
+# HTTP Proxy Implementation
 
-Expertise in implementing HTTP and HTTPS proxy functionality including request forwarding, CONNECT tunneling, header
+Expertise in implementing HTTP and HTTPS proxy functionality: request forwarding, CONNECT tunneling, header
 manipulation, and response handling.
 
 ## When to use this skill
@@ -138,7 +141,6 @@ io.Copy(clientConn, destConn)
 
 ## Related skills
 
-- SOCKS5 Protocol Implementation - Alternative proxy protocol
-- Credential Management - For proxy authentication
-- Go Concurrency - For connection handling
-
+- `socks5-protocol` - Alternative proxy protocol
+- `credential-management` - For proxy authentication
+- `go-concurrency` - For connection handling

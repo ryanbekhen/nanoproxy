@@ -1,4 +1,6 @@
-# AGENTS.md
+# CLAUDE.md
+
+Guidance for Claude Code when working in this repository.
 
 ## Project at a glance
 
@@ -55,3 +57,15 @@
 - Preserve structured logging style (`zerolog` fields like `client_addr`, `dest_addr`, `latency`) when adding new
   request paths.
 
+## Skills
+
+Task-specific skills live in `.claude/skills/`. Claude loads them automatically when a task matches their description:
+
+- `socks5-protocol` — SOCKS5 (RFC 1928) handshakes, auth, request parsing, wire-format tests.
+- `http-proxy` — HTTP/HTTPS forwarding, CONNECT tunneling, hop-by-hop headers.
+- `tor-integration` — Tor control port, circuit/identity rotation, Tor SOCKS dialing.
+- `credential-management` — bcrypt credential storage and verification.
+- `dns-resolution` — the `Resolver` interface, caching, retries.
+- `configuration-management` — env-driven config in `pkg/config`.
+- `go-concurrency` — goroutine lifecycle, channels, context, pooling.
+- `go-testing` — table-driven tests, testify, coverage, benchmarks.

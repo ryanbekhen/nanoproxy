@@ -1,8 +1,11 @@
-# NanoProxy SOCKS5 Protocol Skill
+---
+name: socks5-protocol
+description: Use when implementing or debugging the SOCKS5 protocol (RFC 1928) in pkg/socks5 — handshakes, auth method negotiation, request parsing, IPv4/IPv6/domain address types, error codes, or byte-level wire-format tests.
+---
 
-## Description
+# SOCKS5 Protocol
 
-Expertise in implementing and debugging the SOCKS5 protocol (RFC 1928) including authentication mechanisms, request
+Expertise in implementing and debugging the SOCKS5 protocol (RFC 1928): authentication mechanisms, request
 parsing, and connection handling.
 
 ## When to use this skill
@@ -132,13 +135,11 @@ case domainType:
 ## References
 
 - RFC 1928: SOCKS Protocol Version 5
-- NanoProxy architecture documentation in `architecture.md`
 - Existing test cases in `pkg/socks5/*_test.go`
 
 ## Related skills
 
-- HTTP Proxy Implementation - For comparing proxy protocols
-- Credential Management - For auth handling
-- DNS Resolution - For hostname resolution
-- Go Concurrency - For connection handling
-
+- `http-proxy` - For comparing proxy protocols
+- `credential-management` - For auth handling
+- `dns-resolution` - For hostname resolution
+- `go-concurrency` - For connection handling
