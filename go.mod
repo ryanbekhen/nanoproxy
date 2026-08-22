@@ -1,6 +1,6 @@
 module github.com/ryanbekhen/nanoproxy
 
-go 1.26.4
+go 1.27.0
 
 require (
 	github.com/caarlos0/env/v10 v10.0.0
