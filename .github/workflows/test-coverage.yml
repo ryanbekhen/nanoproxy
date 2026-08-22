@@ -19,12 +19,12 @@ jobs:
       GOCOVERDIR: ""
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           # Use the version from go.mod to keep CI/tooling in sync
           go-version-file: go.mod
