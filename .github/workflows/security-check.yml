@@ -11,6 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GO111MODULE: on
+      # The gosec image ships its own Go and pins GOTOOLCHAIN=local, so it
+      # refuses a go.mod requiring a newer release than it bundles. Let it
+      # fetch the toolchain go.mod asks for instead.
+      GOTOOLCHAIN: auto
     steps:
       - name: Checkout Source
         uses: actions/checkout@v4
