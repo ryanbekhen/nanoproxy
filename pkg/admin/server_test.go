@@ -205,6 +205,7 @@ func TestServer_SetupFlow_CreatesAdminAndPersistsAcrossRestart(t *testing.T) {
 	_ = resp.Body.Close()
 
 	resp, err = client.PostForm(ts.URL+"/admin/setup", url.Values{
+		"setup_token":      {s.setupToken},
 		"username":         {"admin"},
 		"password":         {"super-secret"},
 		"confirm_password": {"super-secret"},
@@ -248,6 +249,7 @@ func TestServer_SetupFlow_RejectsInvalidInput(t *testing.T) {
 	defer ts.Close()
 
 	resp, err := http.PostForm(ts.URL+"/admin/setup", url.Values{
+		"setup_token":      {s.setupToken},
 		"username":         {"ad"},
 		"password":         {"short"},
 		"confirm_password": {"short"},
@@ -270,6 +272,7 @@ func TestServer_SetupFlow_PasswordMismatch(t *testing.T) {
 	defer ts.Close()
 
 	resp, err := http.PostForm(ts.URL+"/admin/setup", url.Values{
+		"setup_token":      {s.setupToken},
 		"username":         {"admin"},
 		"password":         {"password123"},
 		"confirm_password": {"password456"},
@@ -301,6 +304,7 @@ func TestServer_SetupFlow_InvalidUsername(t *testing.T) {
 
 	for _, username := range testCases {
 		resp, err := http.PostForm(ts.URL+"/admin/setup", url.Values{
+			"setup_token":      {s.setupToken},
 			"username":         {username},
 			"password":         {"validpass123"},
 			"confirm_password": {"validpass123"},
@@ -324,6 +328,7 @@ func TestServer_SetupFlow_ShortPassword(t *testing.T) {
 	defer ts.Close()
 
 	resp, err := http.PostForm(ts.URL+"/admin/setup", url.Values{
+		"setup_token":      {s.setupToken},
 		"username":         {"admin"},
 		"password":         {"1234567"},
 		"confirm_password": {"1234567"},
@@ -354,6 +359,7 @@ func TestServer_SetupFlow_PreventDoubleSetup(t *testing.T) {
 
 	// First setup
 	resp, err := client.PostForm(ts.URL+"/admin/setup", url.Values{
+		"setup_token":      {s.setupToken},
 		"username":         {"admin"},
 		"password":         {"password123"},
 		"confirm_password": {"password123"},
@@ -372,6 +378,7 @@ func TestServer_SetupFlow_PreventDoubleSetup(t *testing.T) {
 	}
 
 	resp, err = noFollow.PostForm(ts.URL+"/admin/setup", url.Values{
+		"setup_token":      {s.setupToken},
 		"username":         {"attacker"},
 		"password":         {"password123"},
 		"confirm_password": {"password123"},
@@ -1262,4 +1269,150 @@ func extractCSRFToken(t *testing.T, content string) string {
 	}
 
 	return matches[1]
+}
+
+// Regression tests for GHSA-q797-rfq6-2cgc: unauthenticated first-run admin takeover.
+
+func newUnconfiguredServer(t *testing.T, allowedOrigins []string) (*Server, *httptest.Server) {
+	t.Helper()
+	logger := zerolog.New(io.Discard)
+	dbPath := filepath.Join(t.TempDir(), "data.db")
+	s := New(&Config{
+		Credentials:    credential.NewStaticCredentialStore(),
+		UserStore:      credential.NewBoltStore(dbPath),
+		AdminStore:     NewBoltAdminStore(dbPath),
+		AllowedOrigins: allowedOrigins,
+		Logger:         &logger,
+	})
+	ts := httptest.NewServer(s.Handler())
+	t.Cleanup(ts.Close)
+	return s, ts
+}
+
+func postSetup(t *testing.T, target string, form url.Values, headers map[string]string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, target+"/admin/setup", strings.NewReader(form.Encode()))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	noFollow := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	resp, err := noFollow.Do(req)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	return resp
+}
+
+func setupForm(token string) url.Values {
+	return url.Values{
+		"setup_token":      {token},
+		"username":         {"attacker"},
+		"password":         {"AttackerPassword123"},
+		"confirm_password": {"AttackerPassword123"},
+	}
+}
+
+func TestServer_Setup_GeneratesTokenOnlyWhenUnconfigured(t *testing.T) {
+	s, _ := newUnconfiguredServer(t, nil)
+	assert.NotEmpty(t, s.setupToken)
+
+	logger := zerolog.New(io.Discard)
+	configured := New(&Config{
+		AdminStore: newSeededAdminStore(t, "admin", "secret-pass"),
+		Logger:     &logger,
+	})
+	assert.Empty(t, configured.setupToken)
+	assert.False(t, configured.validSetupToken(""))
+}
+
+func TestServer_Setup_RejectsMissingOrWrongToken(t *testing.T) {
+	s, ts := newUnconfiguredServer(t, nil)
+
+	for _, token := range []string{"", "wrong-token", s.setupToken + "x"} {
+		resp := postSetup(t, ts.URL, setupForm(token), nil)
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode, "token %q", token)
+		assert.Empty(t, resp.Header.Get("Set-Cookie"))
+	}
+	assert.False(t, s.hasConfiguredAdminCredentials())
+}
+
+func TestServer_Setup_RejectsCrossOriginEvenWithDefaultConfig(t *testing.T) {
+	s, ts := newUnconfiguredServer(t, nil)
+
+	cases := []map[string]string{
+		{"Origin": "https://evil.example"},
+		{"Origin": "null"},
+		{"Referer": "https://evil.example/page"},
+		{"Sec-Fetch-Site": "cross-site"},
+	}
+	for _, h := range cases {
+		resp := postSetup(t, ts.URL, setupForm(s.setupToken), h)
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode, "headers %v", h)
+	}
+	assert.False(t, s.hasConfiguredAdminCredentials())
+}
+
+func TestServer_Setup_SucceedsWithTokenAndSameOrigin(t *testing.T) {
+	s, ts := newUnconfiguredServer(t, nil)
+	token := s.setupToken
+
+	resp := postSetup(t, ts.URL, setupForm(token), map[string]string{
+		"Origin":         ts.URL,
+		"Sec-Fetch-Site": "same-origin",
+	})
+	assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
+	assert.Equal(t, "/admin/users", resp.Header.Get("Location"))
+	assert.True(t, s.hasConfiguredAdminCredentials())
+	assert.Empty(t, s.setupToken, "token must be single-use")
+}
+
+func TestServer_Setup_AllowlistStillEnforced(t *testing.T) {
+	s, ts := newUnconfiguredServer(t, []string{"http://allowed.local"})
+
+	resp := postSetup(t, ts.URL, setupForm(s.setupToken), map[string]string{"Origin": "https://evil.example"})
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+
+	resp = postSetup(t, ts.URL, setupForm(s.setupToken), map[string]string{"Origin": "http://allowed.local"})
+	assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
+	assert.Equal(t, "/admin/users", resp.Header.Get("Location"))
+}
+
+func TestServer_Login_RejectsCrossOriginWithDefaultConfig(t *testing.T) {
+	logger := zerolog.New(io.Discard)
+	s := New(&Config{
+		AdminStore: newSeededAdminStore(t, "admin", "secret-pass"),
+		Logger:     &logger,
+	})
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/admin/login", strings.NewReader("username=admin&password=secret-pass"))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "https://evil.example")
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+}
+
+func TestVerifySameOrigin_EdgeCases(t *testing.T) {
+	r := httptest.NewRequest(http.MethodPost, "http://proxy.local:9090/admin/login", nil)
+	r.Header.Set("Origin", "://bad")
+	assert.Error(t, verifySameOrigin(r))
+
+	r = httptest.NewRequest(http.MethodPost, "http://proxy.local:9090/admin/login", nil)
+	r.Header.Set("Referer", "not-a-url")
+	assert.Error(t, verifySameOrigin(r))
+
+	r = httptest.NewRequest(http.MethodPost, "http://proxy.local:9090/admin/login", nil)
+	r.Header.Set("Referer", "http://PROXY.local:9090/admin/login")
+	assert.NoError(t, verifySameOrigin(r))
+
+	r = httptest.NewRequest(http.MethodPost, "http://proxy.local:9090/admin/login", nil)
+	r.Host = ""
+	assert.Error(t, verifySameOrigin(r))
 }

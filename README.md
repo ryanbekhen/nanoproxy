@@ -206,13 +206,13 @@ nanoproxy
 You can also run NanoProxy using Docker. To do so, you can use the following command:
 
 ```shell
-docker run -p 1080:1080 -p 8080:8080 -p 9090:9090 ghcr.io/ryanbekhen/nanoproxy:latest
+docker run -p 1080:1080 -p 8080:8080 -p 127.0.0.1:9090:9090 ghcr.io/ryanbekhen/nanoproxy:latest
 ```
 
 You can also run NanoProxy behind Tor using the following command:
 
 ```shell
-docker run --rm -e TOR_ENABLED=true -d --privileged --cap-add=NET_ADMIN --sysctl net.ipv6.conf.all.disable_ipv6=0 --sysctl net.ipv4.conf.all.src_valid_mark=1 -p 1080:1080 -p 8080:8080 -p 9090:9090 ghcr.io/ryanbekhen/nanoproxy-tor:latest
+docker run --rm -e TOR_ENABLED=true -d --privileged --cap-add=NET_ADMIN --sysctl net.ipv6.conf.all.disable_ipv6=0 --sysctl net.ipv4.conf.all.src_valid_mark=1 -p 1080:1080 -p 8080:8080 -p 127.0.0.1:9090:9090 ghcr.io/ryanbekhen/nanoproxy-tor:latest
 ```
 
 ## Configuration
@@ -232,7 +232,11 @@ export USER_STORE_PATH=./nanoproxy-data.db
 ```
 
 Then access the admin panel at `http://localhost:9090/admin/setup` to create your initial admin account and add proxy
-users.
+users. On first run NanoProxy prints a one-time **setup token** to its log (for Docker: `docker logs <container>`);
+the setup page requires it, so only someone with access to the server logs can claim the instance.
+
+> **Security:** do not expose the admin port (`9090`) to untrusted networks. Publish it on loopback only
+> (`-p 127.0.0.1:9090:9090`) and set `ADMIN_ALLOWED_ORIGINS` when serving the admin console behind a reverse proxy.
 
 To run without proxy authentication:
 

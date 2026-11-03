@@ -40,6 +40,7 @@ const (
 	defaultLoginWindow      = 5 * time.Minute
 	defaultLockoutDuration  = 10 * time.Minute
 	minAdminPasswordLength  = 8
+	setupTokenBytes         = 24
 )
 
 var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
@@ -64,7 +65,11 @@ type Server struct {
 	sessions map[string]session
 	logins   map[string]loginAttempt
 	admin    adminCredential
-	mu       sync.Mutex
+	// setupToken is a one-time secret required by POST /admin/setup while no
+	// admin account exists. It is printed to the server log at startup so only
+	// someone with access to the host/container logs can claim the instance.
+	setupToken string
+	mu         sync.Mutex
 }
 
 type adminCredential struct {
@@ -151,6 +156,23 @@ func New(conf *Config) *Server {
 		}
 	}
 
+	if len(conf.AllowedOrigins) == 0 {
+		conf.Logger.Warn().Msg("ADMIN_ALLOWED_ORIGINS is not set; admin console only accepts same-origin form submissions")
+	}
+
+	if !server.hasConfiguredAdminCredentials() {
+		token, err := newRandomToken(setupTokenBytes)
+		if err != nil {
+			// Without a token nobody can complete setup; fail closed.
+			conf.Logger.Error().Err(err).Msg("failed to generate admin setup token; initial setup is disabled")
+		} else {
+			server.setupToken = token
+			conf.Logger.Warn().
+				Str("setup_token", token).
+				Msg("No admin account configured. Open /admin/setup and enter this setup token to create the initial admin account")
+		}
+	}
+
 	return server
 }
 
@@ -171,7 +193,7 @@ func (s *Server) withSecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("Cache-Control", "no-store")
 		next.ServeHTTP(w, r)
 	})
@@ -226,6 +248,14 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "invalid form", http.StatusBadRequest)
+			return
+		}
+
+		if !s.validSetupToken(r.PostFormValue("setup_token")) {
+			s.config.Logger.Warn().
+				Str("client_addr", r.RemoteAddr).
+				Msg("rejected admin setup attempt with invalid setup token")
+			s.renderTemplate(w, "setup.gohtml", setupViewData{Error: "invalid setup token; check the server log for the current token"}, http.StatusForbidden)
 			return
 		}
 
@@ -796,7 +826,19 @@ func (s *Server) bootstrapAdminCredentials(username, password string) error {
 	}
 
 	s.admin = adminCredential{Username: username, PasswordHash: string(passwordHash)}
+	s.setupToken = ""
 	return nil
+}
+
+func (s *Server) validSetupToken(provided string) bool {
+	s.mu.Lock()
+	expected := s.setupToken
+	s.mu.Unlock()
+
+	if expected == "" || provided == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(strings.TrimSpace(provided)), []byte(expected)) == 1
 }
 
 func (s *Server) isAuthenticated(r *http.Request) bool {
@@ -889,8 +931,14 @@ func (s *Server) rotateCSRFToken(r *http.Request) (string, error) {
 }
 
 func (s *Server) verifyOrigin(r *http.Request) error {
+	// Browsers label cross-site requests explicitly; reject them regardless of
+	// the configured allowlist.
+	if site := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site"))); site == "cross-site" {
+		return httpError("cross-site request")
+	}
+
 	if len(s.config.AllowedOrigins) == 0 {
-		return nil
+		return verifySameOrigin(r)
 	}
 
 	originHeader := strings.TrimSpace(r.Header.Get("Origin"))
@@ -919,6 +967,41 @@ func (s *Server) verifyOrigin(r *http.Request) error {
 	}
 
 	return httpError("origin or referer required")
+}
+
+// verifySameOrigin is the policy used when no allowlist is configured: if the
+// request carries an Origin or Referer, its host must match the Host the
+// request was sent to. Requests with neither header come from non-browser
+// clients, which cannot be driven cross-site, and are allowed.
+func verifySameOrigin(r *http.Request) error {
+	requestHost := strings.ToLower(strings.TrimSpace(r.Host))
+	if requestHost == "" {
+		return httpError("missing host")
+	}
+
+	if originHeader := strings.TrimSpace(r.Header.Get("Origin")); originHeader != "" {
+		parsed, err := url.Parse(originHeader)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			return httpError("invalid origin")
+		}
+		if strings.ToLower(parsed.Host) != requestHost {
+			return httpError("origin not allowed")
+		}
+		return nil
+	}
+
+	if refererHeader := strings.TrimSpace(r.Header.Get("Referer")); refererHeader != "" {
+		parsed, err := url.Parse(refererHeader)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			return httpError("invalid referer")
+		}
+		if strings.ToLower(parsed.Host) != requestHost {
+			return httpError("referer not allowed")
+		}
+		return nil
+	}
+
+	return nil
 }
 
 func (s *Server) isAllowedOrigin(origin string) bool {
