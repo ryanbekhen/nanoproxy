@@ -41,7 +41,7 @@ NanoProxy is configured entirely through environment variables. There is no conf
 | `ADMIN_MAX_LOGIN_ATTEMPTS` | int          | `5`     | Maximum failed login attempts before account lockout                                             |
 | `ADMIN_LOGIN_WINDOW`       | duration     | `5m`    | Time window for tracking failed login attempts                                                   |
 | `ADMIN_LOCKOUT_DURATION`   | duration     | `10m`   | Duration to lock account after max failed attempts                                               |
-| `ADMIN_ALLOWED_ORIGINS`    | string (csv) | empty   | Comma-separated list of allowed CORS origins for admin panel (e.g., `https://admin.example.com`) |
+| `ADMIN_ALLOWED_ORIGINS`    | string (csv) | empty   | Comma-separated list of origins allowed to submit admin forms (e.g., `https://admin.example.com`). When empty, only same-origin requests are accepted |
 
 ### Proxy Authentication Mode
 
@@ -198,7 +198,9 @@ WantedBy=multi-user.target
 NanoProxy starts an admin console on `ADDR_ADMIN` in normal mode (`NO_AUTH_MODE=false`).
 
 - Visit `/` or `/admin` on the admin address.
-- On first run (when no admin exists in `USER_STORE_PATH`), create the admin account at `/admin/setup`.
+- On first run (when no admin exists in `USER_STORE_PATH`), NanoProxy prints a one-time `setup_token` to the server
+  log. Open `/admin/setup` and enter that token to create the admin account. The token is regenerated on every
+  restart until setup is completed, and is discarded afterwards.
 - After setup, log in using that admin account.
 - Add or delete proxy users from the UI.
 - Those proxy users are saved to `USER_STORE_PATH` and loaded again on restart.
@@ -226,6 +228,10 @@ go run .
 - CSRF tokens are rotated after successful state-changing actions.
 - Login attempts are rate-limited (`ADMIN_MAX_LOGIN_ATTEMPTS`, `ADMIN_LOGIN_WINDOW`, `ADMIN_LOCKOUT_DURATION`).
 - If `ADMIN_ALLOWED_ORIGINS` is configured, requests without allowed `Origin`/`Referer` are rejected.
+- If `ADMIN_ALLOWED_ORIGINS` is empty, requests whose `Origin`/`Referer` does not match the request `Host` are rejected.
+- Requests marked `Sec-Fetch-Site: cross-site` by the browser are always rejected.
+- The admin port should not be exposed to untrusted networks. Prefer publishing it on loopback only
+  (e.g. `-p 127.0.0.1:9090:9090`) and reaching it through an SSH tunnel or a reverse proxy.
 
 ## Notes
 
